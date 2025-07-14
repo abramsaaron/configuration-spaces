@@ -1,1 +1,1148 @@
-"use strict";let graph;let graphs={};let graphicsForGraph,graphicsForConfigurationSpace;let configuration_space,configuration_spaceLayout;let cameraState,areWeOnTheLeft;let font;let infoStrings;let chooseFile;let easyCamActive=true;let temperature=1;let cold=.001;let coolingRate=0;let viewingStyle="single";let gui;let parameters={};let customGraph;let infoDiv;let infoString;let verbose=!true;let running=true;let takeScreenshotGraph=!true;let takeScreenshotConfigSpace=!true;let forcesActive=true;let robotAmoving=true;let robotBmoving=true;let addSingleNodeMode=false;let nodeSelectedForEdgeAddition;let deleteNodeMode=false;function preload(){font=loadFont("fonts/Myriad_Pro_6809.otf")}function setup(){noCanvas();setAttributes("antialias",true);infoDiv=select("#info");infoDiv.hide();chooseFile=createFileInput(handleFile);chooseFile.parent("inputDiv");initParameters();setParametersFromURL();init()}function resetCanvases(){if(graphicsForGraph!==undefined){graphicsForGraph.remove()}if(graphicsForConfigurationSpace!==undefined){graphicsForConfigurationSpace.remove()}}function initgraphicsForGraph(w,h){graphicsForGraph=createGraphics(w,h,WEBGL);graphicsForGraph.smooth();graphicsForGraph.parent("graph");graphicsForGraph.pixelDensity(2);graphicsForGraph.show();setupEasyCam(graphicsForGraph,500);addScreenPositionFunction(graphicsForGraph);if(verbose)console.log(graphicsForGraph);graphicsForGraph.canvas.addEventListener("click",mousePressedOnLeft)}function initgraphicsForConfigurationSpace(w,h){graphicsForConfigurationSpace=createGraphics(w,h,WEBGL);graphicsForConfigurationSpace.smooth();graphicsForConfigurationSpace.parent("configspace");graphicsForConfigurationSpace.pixelDensity(2);graphicsForConfigurationSpace.show();let gl=graphicsForConfigurationSpace.canvas.getContext("webgl");gl.disable(gl.DEPTH_TEST);setupEasyCam(graphicsForConfigurationSpace,500);addScreenPositionFunction(graphicsForConfigurationSpace)}function init(){initView(viewingStyle);initGraph(parameters.graphType);initGUI()}function updateMode(){switch(parameters.mode){case"View":easyCamOn();deleteNodeMode=false;break;case"Move":easyCamOff();deleteNodeMode=false;break;case"Edit":easyCamOff();break}}function toggleView(){if(viewingStyle==="dual"){viewingStyle="single"}else if(viewingStyle==="single"){viewingStyle="dual"}init()}function initView(style){viewingStyle=style;resetCanvases();if(style==="single"){initgraphicsForGraph(0,windowHeight);initgraphicsForConfigurationSpace(windowWidth,windowHeight)}else if(viewingStyle==="dual"){initgraphicsForGraph(windowWidth/2,windowHeight);initgraphicsForConfigurationSpace(windowWidth/2,windowHeight)}if(parameters.lights){let ambientBrightness=180;let directionalBrightness=180;graphicsForGraph.ambientLight(ambientBrightness,ambientBrightness,ambientBrightness);graphicsForGraph.directionalLight(directionalBrightness,directionalBrightness,directionalBrightness,-1,0,0);graphicsForConfigurationSpace.ambientLight(ambientBrightness,ambientBrightness,ambientBrightness);graphicsForConfigurationSpace.directionalLight(directionalBrightness,directionalBrightness,directionalBrightness,-1,0,0)}}function initParameters(){parameters.graphType="K(2,3)";parameters.mode="View";parameters.showGraph=true;parameters.showConfigurationspace=true;parameters.showInfo=!true;parameters.showRobots=true;parameters.syncView=true;parameters.distinguishDots=!true;parameters.gridOn=!true;parameters.squareOn=true;parameters.showHyperplanes=true;parameters.granularityFirstCoordinate=10;parameters.granularitySecondCoordinate=10;parameters.showText=!true;parameters.sphereView=true;parameters.lights=true;parameters.moveDotsRandomly=!true;parameters.robotASpeed=.1;parameters.robotBSpeed=.1;parameters.amountMultiplier=.05;parameters.recordHistory=!true;parameters.showHistory=!true;parameters.sphereDetail=30;parameters.resetHistory=function(){configuration_space.graphLayout.configuration.resetHistory()};parameters.speedUp=1;parameters.labelX=0;parameters.labelY=0;parameters.labelZ=20;parameters.colorRobotA=[220,0,0];parameters.colorRobotB=[60,60,60];parameters.colorConfig=[31,108,179];parameters.colorNode=[180,180,180];parameters.colorGraphEdge=[31,108,179];parameters.squareColor=[0,0,0];parameters.squareOpacity=100;parameters.activeDotColor=[220,110,0];parameters.deleteNodeColor=[100,0,200];parameters.selectedNodeForEdgeColor=[45,80,200];parameters.nodeSize=20;parameters.robotsNodeSize=21;parameters.configNodeSize=21;parameters.edgeWidthGraph=4.5;parameters.edgeWidthConfigSpace=2;parameters.edgeWidthGrid=.4}function initGUI(){const pane=new Tweakpane;pane.addInput(parameters,"showInfo").on("change",(e=>{if(e.value){infoDiv.show()}else{infoDiv.hide()}}));pane.addInput(parameters,"graphType",{options:{"K(1,1)":"K(1,1)","K(1,2)":"K(1,2)","K(1,3)":"K(1,3)"}}).on("change",(e=>{parameters.mode="View";updateMode();init()}));if(gui!==undefined)gui.destroy();gui=new dat.GUI({autoPlace:false,width:400});let globalUI=gui.addFolder("Settings");let graphPicker=globalUI.add(parameters,"graphType",["C(20)","K(1,1)","K(1,2)","K(1,3)","K(1,4)","K(1,5)","K(1,6)","K(1,7)","K(1,8)","K(1,9)","K(1,10)","K(2,2)","K(2,3)","K(2,4)","K(2,5)","K(2,6)","K(3,3)","K(3,4)","K(4,4)","K(2)","K(3)","K(4)","K(5)","K(6)","K(7)","K(8)","C(2)","C(3)","C(4)","C(5)","C(6)","C(7)","W(4)","W(5)","W(6)","W(7)","W(8)","W(9)","W(10)","custom"]).name("Choose graph").listen();graphPicker.onChange((function(value){parameters.mode="View";updateMode();init()}));let modePicker=globalUI.add(parameters,"mode",["View","Move","Edit"]).name("Choose mode").listen();modePicker.onChange((function(value){updateMode()}));let showGraphToggle=globalUI.add(parameters,"showGraph").name("Show graph");showGraphToggle.onChange((function(value){updateURL()}));let showConfigurationspaceToggle=globalUI.add(parameters,"showConfigurationspace").name("Show configuration space");showConfigurationspaceToggle.onChange((function(value){updateURL()}));let showRobotsToggle=globalUI.add(parameters,"showRobots").name("Show robots");showRobotsToggle.onChange((function(value){updateURL()}));let showInfoToggle=globalUI.add(parameters,"showInfo").name("Show info");showInfoToggle.onChange((function(value){if(value){infoDiv.show()}else{infoDiv.hide()}}));if(viewingStyle==="dual"){globalUI.add(parameters,"syncView").name("Sync views")}let visualGUI=gui.addFolder("Visual Parameters");visualGUI.add(parameters,"showText").name("Show text");visualGUI.add(parameters,"nodeSize",0,40).name("Node size");visualGUI.add(parameters,"sphereView").name("Show spheres");visualGUI.add(parameters,"sphereDetail",1,60).step(1).name("Sphere detail");let lightsChange=visualGUI.add(parameters,"lights").name("Use lights (resets!)");lightsChange.onFinishChange((function(value){init()}));visualGUI.addColor(parameters,"colorNode").name("Node color");visualGUI.add(parameters,"labelX",-100,100).step(1).name("Label: X offset");visualGUI.add(parameters,"labelY",-100,100).step(1).name("Label: Y offset");visualGUI.add(parameters,"labelZ",-100,100).step(1).name("Label: Z offset");let motionGUI=gui.addFolder("Motion");motionGUI.add(parameters,"moveDotsRandomly").name("Move robots");motionGUI.add(parameters,"amountMultiplier",0,1).step(.001).name("Robot speed multiplier");motionGUI.add(parameters,"robotASpeed",0,1).step(.001).name("Robot A speed");motionGUI.add(parameters,"robotBSpeed",0,1).step(.001).name("Robot B speed");motionGUI.add(parameters,"speedUp",0,1e3).name("Drawing speed-up");motionGUI.add(parameters,"recordHistory").name("Record configuration history");motionGUI.add(parameters,"showHistory").name("Show configuration history ");motionGUI.add(parameters,"resetHistory").name("Reset configuration history");let visualGUIGraph=gui.addFolder("Visuals for graph");visualGUIGraph.add(parameters,"robotsNodeSize",0,40).name("Node size for robots");visualGUIGraph.add(parameters,"edgeWidthGraph",0,10).name("Edge width in graph");visualGUIGraph.addColor(parameters,"colorRobotA").name("Robot A color");visualGUIGraph.addColor(parameters,"colorRobotB").name("Robot B color");visualGUIGraph.addColor(parameters,"colorGraphEdge").name("Edge color");let visualGUISpace=gui.addFolder("Visuals for config space");visualGUISpace.add(parameters,"configNodeSize",0,40).name("Node size for configurations");visualGUISpace.add(parameters,"edgeWidthConfigSpace",0,10).name("Edge width in space");visualGUISpace.add(parameters,"edgeWidthGrid",0,10).name("Edge width for square grid");visualGUISpace.add(parameters,"gridOn").name("Show square grid");visualGUISpace.add(parameters,"squareOn").name("Show square surface");visualGUISpace.add(parameters,"showHyperplanes").name("Show hyperplanes");visualGUISpace.add(parameters,"granularityFirstCoordinate",0,80).step(1).name("Granularity for 1. coordinate");visualGUISpace.add(parameters,"granularitySecondCoordinate",0,80).step(1).name("Granularity for 2. coordinate");visualGUISpace.addColor(parameters,"squareColor").name("Square surface color");visualGUISpace.add(parameters,"squareOpacity",0,255).name("Square surface opacity");visualGUISpace.addColor(parameters,"colorConfig").name("Configuration color");let graphGUI=gui.addFolder("Graph Parameters");graphGUI.add(graph.graphLayout,"edgelength",0,400).name("Target edge length");graphGUI.add(graph.graphLayout,"graphEdgeForce",0,.1).name("Edge force");graphGUI.add(graph.graphLayout,"maxspeed",0,1e3).name("Max node speed");graphGUI.add(graph.graphLayout,"cohesionthreshold",0,2).name("Neighbor attraction threshold");graphGUI.add(graph.graphLayout,"repulsion",0,1e5).name("Repulsion");graphGUI.add(graph.graphLayout,"separationFactor",0,3).name("Separation factor");graphGUI.add(graph.graphLayout,"planarForce",0,.15).name("Planar force").listen();graphGUI.add(graph.graphLayout,"centerForce",0,.15).name("Center force").listen();graphGUI.add(graph.graphLayout,"extraCenterForce",0,.15).name("Extra center force");graphGUI.add(graph.graphLayout,"moveToCenter").name("Adjust to center");let configGUI=gui.addFolder("Configuration Space Parameters");configGUI.add(configuration_space.graphLayout,"firstCoordinateEdgeLength",1,1e3).name("First coordinate target edge length");configGUI.add(configuration_space.graphLayout,"firstCoordinateForce",0,.1).name("force for First coordinate edge");configGUI.add(configuration_space.graphLayout,"secondCoordinateEdgeLength",1,1e3).name("Second coordinate target edge length");configGUI.add(configuration_space.graphLayout,"secondCoordinateForce",0,.1).name("force for Second coordinate edge");configGUI.add(configuration_space.graphLayout,"firstCoordinateMirrorEdgeLength",1,1e3).name("First coordinate mirror target edge length");configGUI.add(configuration_space.graphLayout,"firstCoordinateMirrorForce",0,.1).name("force for First coordinate mirror edge");configGUI.add(configuration_space.graphLayout,"secondCoordinateMirrorEdgeLength",1,1e3).name("Second coordinate mirror target edge length");configGUI.add(configuration_space.graphLayout,"secondCoordinateMirrorForce",0,.1).name("force for Second coordinate mirror edge");configGUI.add(configuration_space.graphLayout,"coordinatePreference",-.1,.1).name("coordinatePreference");configGUI.add(configuration_space.graphLayout,"extraCenterPreference",0,.1).name("extraCenterPreference");configGUI.add(configuration_space.graphLayout,"maxspeed",0,1e3).name("Max node speed");configGUI.add(configuration_space.graphLayout,"cohesionthreshold",0,2).name("Neighbor attraction threshold");configGUI.add(configuration_space.graphLayout,"repulsion",0,1e5).name("Repulsion");configGUI.add(configuration_space.graphLayout,"separationFactor",0,3).name("Separation factor");configGUI.add(configuration_space.graphLayout,"centerForce",0,.15).listen();configGUI.add(configuration_space.graphLayout,"extraCenterForce",0,.15).name("Extra center force");configGUI.add(configuration_space.graphLayout,"moveToCenter").name("Adjust to center");var customContainer=document.getElementById("gui");customContainer.appendChild(gui.domElement);globalUI.open()}function draw(){if(temperature>cold){tick();graph.update();configuration_space.update()}if(parameters.moveDotsRandomly){for(let i=0;i<parameters.speedUp;i++){graph.moveRobots()}}graph.show();configuration_space.show();if(parameters.showInfo){updateInfoString()}if(takeScreenshotGraph){takeScreenshotGraph=false;saveCanvas(graph.graphLayout.graphics,makeFileName("-graph.png"))}if(takeScreenshotConfigSpace){takeScreenshotConfigSpace=false;saveCanvas(configuration_space.graphLayout.graphics,makeFileName("-configspace.png"))}if(mouseIsPressed){ourMouseDragged()}}function makeFileName(postString){let time=str(year())+("0"+str(month())).slice(-2)+("0"+str(day())).slice(-2)+"_"+("0"+str(hour())).slice(-2)+("0"+str(minute())).slice(-2)+("0"+str(second())).slice(-2);return time+"-"+parameters.graphType+postString}function tick(){temperature=temperature*(1-coolingRate)}function reheat(){temperature=1}function setupEasyCam(g,thisDistance){let easycam=createEasyCam(g._renderer,{distance:thisDistance});easycam.setDistanceMin(10);easycam.setDistanceMax(3e3);easycam.attachMouseListeners(g._renderer);easycam.setWheelScale(300);easycam.setViewport([g.elt.offsetLeft,g.elt.offsetTop,g.elt.offsetWidth,g.elt.offsetHeight]);g.easycam=easycam}function initGraph(graphType){reheat();if(verbose)print("initGraph: "+graphType);if(graphType==="custom"&&customGraph!==undefined){graph=new Graph(customGraph.nodes,customGraph.edges)}else if(graphType.charAt(0)==="K"){graphType=graphType.slice(2,-1);let numbers=split(graphType,",");if(numbers.length==2){graph=completeBipartiteGraph(int(numbers[0]),int(numbers[1]))}else if(numbers.length==1){graph=completeGraph(int(numbers[0]))}}else if(graphType.charAt(0)==="C"){graphType=graphType.slice(2,-1);let numbers=split(graphType,",");if(numbers.length==1){graph=chainGraph(int(numbers[0]))}}else if(graphType.charAt(0)==="W"){graphType=graphType.slice(2,-1);let numbers=split(graphType,",");if(numbers.length==1){graph=wheelGraph(int(numbers[0]))}}graph.createGraphLayout(graphicsForGraph,true);configuration_space=new Configuration_space(graph,2);if(verbose)print(configuration_space);updateURL()}class Graph{constructor(nodeLabels,edgeLabels){this.type="graph";this.nodes=nodeLabels;this.edges=edgeLabels}update(){this.graphLayout.update()}show(){this.graphLayout.show()}getRobots(){return[this.robotA,this.robotB]}otherRobot(robot){if(this.robotA===robot)return this.robotB;else return this.robotA}moveRobots(){let addtoA=parameters.amountMultiplier*parameters.robotASpeed;let addtoB=parameters.amountMultiplier*parameters.robotBSpeed;let nextA=this.robotA.amount+addtoA;let nextB=this.robotB.amount+addtoB;if(nextA>=1&&nextB<1){nextA=1;nextB=this.robotB.amount+addtoB*(1-this.robotA.amount)/addtoA}else if(nextA<1&&nextB>=1){nextB=1;nextA=this.robotA.amount+addtoA*(1-this.robotB.amount)/addtoB}else if(nextA>=1&&nextB>=1){let timeA=(1-this.robotA.amount)/(nextA-this.robotA.amount);let timeB=(1-this.robotB.amount)/(nextB-this.robotB.amount);if(timeA>timeB){nextB=1;nextA=this.robotA.amount+addtoA*timeB}else{nextA=1;nextB=this.robotB.amount+addtoB*timeA}}if(robotAmoving){this.robotA.setAmount(nextA)}if(robotBmoving){this.robotB.setAmount(nextB)}if(parameters.recordHistory){configuration_space.graphLayout.configuration.record(this.robotA.nodeFrom,this.robotA.nodeTo,this.robotA.amount,this.robotB.nodeFrom,this.robotB.nodeTo,this.robotB.amount)}}createGraphLayout(graphics,layout3D){this.graphLayout=new GraphLayout(this,graphics,layout3D);for(let nodeLabel of this.nodes){this.graphLayout.addNode(nodeLabel)}for(let edgeLabel of this.edges){let nodeFrom=this.graphLayout.getNode(edgeLabel[0]);let nodeTo=this.graphLayout.getNode(edgeLabel[1]);this.graphLayout.addEdge(edgeLabel,nodeFrom,nodeTo)}this.robotA=new Robot(this,this.graphLayout.nodes[0],0);this.robotB=new Robot(this,this.graphLayout.nodes[1],1);this.graphLayout.initlayout()}}class Configuration_space{constructor(graph,dimension){this.type="configuration_space";this.dimension=dimension;let positions=graph.nodes.concat(graph.edges);let possible_states=cartesianProductOf(positions,positions);this.states=possible_states.filter(is_state);if(verbose)console.log(this.states);if(verbose)print("States:");if(verbose)print(this.states);this.createGraphLayout(graphicsForConfigurationSpace,true)}update(){this.graphLayout.update()}show(){this.graphLayout.show()}getRobots(){return[]}getDegree(state){return flatten(state).length-this.dimension}addStates(label){let positions=graph.nodes.concat(graph.edges);let newPossibleStates=cartesianProductOf([label],positions).concat(cartesianProductOf(positions,[label]));if(verbose)console.log("newPossibleStates");if(verbose)console.log(newPossibleStates);let newStates=newPossibleStates.filter(is_state);for(let state of newStates){this.addStateToGraphLayout(state);this.states.push(state)}}removeStates(label){let survivingStates=[];let statesToDelete=[];for(let state of this.states){if(flatten(state).includes(label)){statesToDelete.push(state)}else{survivingStates.push(state)}}for(let state of statesToDelete){switch(this.getDegree(state)){case 0:this.graphLayout.deleteNode(state);break;case 1:this.graphLayout.deleteEdge(state);break;case 2:this.graphLayout.deleteSquare(state);break}this.states=survivingStates}}addStateToGraphLayout(state){switch(this.getDegree(state)){case 0:if(verbose)print("state_1:");if(verbose)print(state);this.graphLayout.addNode(state);break;case 1:if(verbose)print("state_1:");if(verbose)print(state);if(Array.isArray(state[0])){let nodeFrom=this.graphLayout.getNode([state[0][0],state[1]]);let nodeTo=this.graphLayout.getNode([state[0][1],state[1]]);this.graphLayout.addEdge(state,nodeFrom,nodeTo)}else if(Array.isArray(state[1])){let nodeFrom=this.graphLayout.getNode([state[0],state[1][0]]);let nodeTo=this.graphLayout.getNode([state[0],state[1][1]]);if(verbose)print("nodeFrom:");if(verbose)print(nodeFrom);this.graphLayout.addEdge(state,nodeFrom,nodeTo)}else{if(verbose)print("error")}break;case 2:if(verbose)print("state_2:");if(verbose)print(state);let edgeAfrom=this.graphLayout.getEdge(state[0][0],state[1],true);let edgeAto=this.graphLayout.getEdge(state[0][1],state[1],true);let edgeBfrom=this.graphLayout.getEdge(state[0],state[1][0],true);let edgeBto=this.graphLayout.getEdge(state[0],state[1][1],true);if(verbose)print(edgeAfrom);if(verbose)print(edgeAto);this.graphLayout.addSquare(state,edgeAfrom,edgeAto,edgeBfrom,edgeBto);break}}createGraphLayout(graphics,layout3D){this.graphLayout=new GraphLayout(this,graphics,layout3D);this.graphLayout.showConfiguration=true;for(let state of this.states){this.addStateToGraphLayout(state)}this.graphLayout.configuration=new Configuration(this.graphLayout,graph.robotA,graph.robotB);this.graphLayout.initlayout()}}class GraphLayout{constructor(source,graphics,layout3D){this.source=source;this.graphics=graphics;this.layout3D=layout3D;this.updating=!true;this.layoutGraph=true;this.nodes=[];this.nodeBorder=true;this.nodeBorderWidth=.05;this.showNodes=true;this.edges=[];this.showEdges=true;this.squares=[];this.showSquares=true;this.planarForce=0;this.centerForce=0;this.extraCenterForce=0;this.moveToCenter=true;this.edgelength=100;this.firstCoordinateEdgeLength=100;this.secondCoordinateEdgeLength=100;this.firstCoordinateMirrorEdgeLength=100;this.secondCoordinateMirrorEdgeLength=100;this.graphEdgeForce=.01;this.firstCoordinateForce=.05;this.secondCoordinateForce=.01;this.firstCoordinateMirrorForce=0;this.secondCoordinateMirrorForce=0;this.extraCenterPreference=0;this.coordinatePreference=.01;this.center=createVector(0,0,0);this.heat=1;this.coolDown=.01;this.maxspeed=180;this.cohesionthreshold=10;this.cohesionFactor=1;this.repulsion=5e4;this.separationFactor=1;this.keyboardactive=true}initlayout(){for(let i=0;i<100;i++){for(let node of this.nodes){node.update(this.nodes);node.move()}}}show(){this.graphics.clear();let gl=graphicsForConfigurationSpace.canvas.getContext("webgl");gl.disable(gl.DEPTH_TEST);if(this.source.type==="configuration_space"&&parameters.showConfigurationspace){if(this.showSquares){for(let square of this.squares)square.show()}}gl.enable(gl.DEPTH_TEST);if(this.source.type==="configuration_space"){if(parameters.showGraph){for(let node of graph.graphLayout.nodes){node.show(this.graphics)}for(let edge of graph.graphLayout.edges){edge.show(this.graphics)}if(parameters.showRobots){for(let robot of graph.getRobots()){robot.show(this.graphics)}}}}if(this.source.type==="graph"||parameters.showConfigurationspace){if(this.showEdges){for(let edge of this.edges){edge.show(this.graphics)}}if(this.showNodes){for(let node of this.nodes){node.show(this.graphics)}}}if(this.source.type==="graph"){if(parameters.showRobots){for(let robot of this.source.getRobots()){robot.show(this.graphics)}}}if(this.source.type==="configuration_space"&&parameters.showConfigurationspace&&parameters.showRobots){if(this.showConfiguration){this.configuration.show()}}this.counter++}update(){if(running){if(this.moveToCenter){let centerAdjustmentX=0;let centerAdjustmentY=0;let centerAdjustmentZ=0;for(let node of this.nodes){centerAdjustmentX+=(-node.position.x+this.center.x)/this.nodes.length;centerAdjustmentY+=(-node.position.y+this.center.y)/this.nodes.length;centerAdjustmentZ+=(-node.position.z+this.center.z)/this.nodes.length}for(let node of this.nodes){if(!node.frozen)node.position.add(.1*centerAdjustmentX,.1*centerAdjustmentY,.1*centerAdjustmentZ)}}if(this.layoutGraph)for(let node of this.nodes){if(forcesActive){node.update(this.nodes);node.move()}}}}getNode(label){for(let node of this.nodes){if(arraysEqual(node.label,label)){return node}}if(verbose)print("returning false");return false}getEdge(labelA,labelB,directed){if(verbose)print("getEdge: ");if(verbose)print(labelA);if(verbose)print(labelB);for(let edge of this.edges){if(arraysEqual([labelA,labelB],edge.label)||!directed&&arraysEqual([labelB,labelA],edge.label)){if(verbose)print("FOUND!");if(verbose)print(edge);return edge}}}getSquare(labelA,labelB){if(verbose)print("getSquare: ");if(verbose)print(labelA);if(verbose)print(labelB);for(let square of this.squares){if(verbose)print(square.label);if(arraysEqual([labelA,labelB],square.label)){if(verbose)print("FOUND!");if(verbose)print(square);return square}}}addNode(label,x,y,z){if(verbose)print("adding node "+label);let r=100;let node=new Node(this,label,x===undefined?random(-r,r):x,y===undefined?random(-r,r):y,z===undefined?random(-r,r):z);this.nodes.push(node);return node}deleteNode(label){let nodeToDelete=this.getNode(label);this.nodes.splice(this.nodes.indexOf(nodeToDelete),1)}addEdge(label,nodeFrom,nodeTo){if(verbose)print("adding edge "+label);if(verbose)print("connecting:");if(verbose)print(nodeFrom.label+" to "+nodeTo.label);let edge=new Edge(this,label,nodeFrom,nodeTo);this.edges.push(edge);nodeTo.connectTo(nodeFrom);nodeFrom.connectTo(nodeTo);return edge}deleteEdge(label){let edgeToDelete=this.getEdge(label[0],label[1],false);this.edges.splice(this.edges.indexOf(edgeToDelete),1)}addSquare(label,edgeAfrom,edgeAto,edgeBfrom,edgeBto){let square=new Square(this,label,edgeAfrom,edgeAto,edgeBfrom,edgeBto);this.squares.push(square)}deleteSquare(label){let squareToDelete=this.getSquare(label[0],label[1]);this.squares.splice(this.squares.indexOf(squareToDelete),1)}}class Node{constructor(graphLayout,label,x,y,z){this.graphLayout=graphLayout;this.graphics=graphLayout.graphics;this.labelText=labelToString(label);this.applyExtraCenterForce=!true;this.label=label;if(verbose)print(label);this.active=false;if(graphLayout.layout3D){this.position=createVector(x,y,z);this.velocity=createVector(0,0,0);this.acceleration=createVector(0,0,0)}else{this.position=createVector(x,y);this.velocity=createVector(0,0);this.acceleration=createVector(0,0)}this.frozen=false;this.alive=true;this.neighbors=[];this.squareneighbors=[]}connectTo(node){this.neighbors.push(node)}connectToDiagonally(node){this.squareneighbors.push(node)}update(nodes){let sep=this.separate(nodes);if(this.graphLayout.source.type==="graph"){let coh=this.cohese(this.graphLayout.edgelength,this.graphLayout.graphEdgeForce,this.neighbors);coh.mult(1*this.graphLayout.cohesionFactor);this.acceleration.add(sep);this.acceleration.add(coh);let planarNodePosition=createVector(this.position.x,this.position.y,0);let planarForceAddition=this.seek(this.graphLayout.planarForce,planarNodePosition);this.acceleration.add(planarForceAddition)}else{let cohA=this.cohese(this.graphLayout.firstCoordinateEdgeLength,this.graphLayout.firstCoordinateForce,this.neighbors.filter((neighbor=>neighbor.label[0]===this.label[0])));let cohB=this.cohese(this.graphLayout.secondCoordinateEdgeLength,this.graphLayout.secondCoordinateForce,this.neighbors.filter((neighbor=>neighbor.label[1]===this.label[1])));let cohAgraph=this.seek(this.graphLayout.coordinatePreference+this.graphLayout.firstCoordinateMirrorForce,graph.graphLayout.getNode(this.label[0]).position);let cohBgraph=this.seek(this.graphLayout.coordinatePreference+this.graphLayout.secondCoordinateMirrorForce,graph.graphLayout.getNode(this.label[1]).position);graph.graphLayout.nodes.forEach((node=>{if(node.applyExtraCenterForce){if(this.label[0]===node.label){cohAgraph=cohAgraph.add(this.seek(this.graphLayout.extraCenterPreference,node.position))}if(this.label[1]===node.label){cohBgraph=cohBgraph.add(this.seek(this.graphLayout.extraCenterPreference,node.position))}}}));sep.mult(1*this.graphLayout.separationFactor);cohA.mult(1*this.graphLayout.cohesionFactor);cohB.mult(1*this.graphLayout.cohesionFactor);cohAgraph.mult(+1*this.graphLayout.cohesionFactor);cohBgraph.mult(-1*this.graphLayout.cohesionFactor);this.acceleration.add(sep);this.acceleration.add(cohA);this.acceleration.add(cohB);this.acceleration.add(cohAgraph);this.acceleration.add(cohBgraph)}let centerForceAddition=this.seek(this.graphLayout.centerForce,this.graphLayout.center);this.acceleration.add(centerForceAddition);if(this.applyExtraCenterForce){let extraCenterForceAddition=this.seek(this.graphLayout.extraCenterForce,this.graphLayout.center);this.acceleration.add(extraCenterForceAddition)}}move(){if(!this.frozen){limitVector(this.velocity,this.graphLayout.maxspeed);this.velocity.add(this.acceleration);this.position.add(this.velocity);this.velocity.mult(.9);this.acceleration.mult(0)}}separate(relevantnodes){let sum=new createVector(0,0,0);for(let other of relevantnodes){let diff=p5.Vector.sub(this.position,other.position);let d=diff.mag();if(d>1){diff.normalize().mult(this.graphLayout.repulsion/(d*d));sum.add(diff)}}return sum}cohese(edgelength,force,relevantnodes){let sum=new createVector(0,0,0);for(let other of relevantnodes){let diff=p5.Vector.sub(this.position,other.position);let d=diff.mag()-edgelength;if(abs(d)>this.graphLayout.cohesionthreshold){diff.normalize().mult(-force*d);sum.add(diff)}}limitVector(sum,edgelength);return sum}seek(force,goal){let diff=p5.Vector.sub(goal,this.position);let d=diff.mag();if(abs(d)>this.graphLayout.cohesionthreshold){diff.normalize().mult(force*d)}return diff}occupied(){let result=false;if(this===graph.robotA.nodeFrom||this===graph.robotA.nodeTo||this===graph.robotB.nodeFrom||this===graph.robotB.nodeTo){result=true}return result}show(g){if(this.nodeBorder){g.stroke(150);g.strokeWeight(parameters.nodeSize*this.graphLayout.nodeBorderWidth)}else{g.noStroke()}if(this.graphLayout.layout3D){g.push();g.translate(this.position.x,this.position.y,this.position.z);if(deleteNodeMode&&!this.occupied()&&g===graphicsForGraph){g.fill(parameters.deleteNodeColor)}else{if(this.applyExtraCenterForce){g.fill(0,255,0)}else if(this.lastSelected){g.fill(50,50,50)}else if(this.active){g.fill(parameters.activeDotColor)}else if(this.firstNodeOfEdge){g.fill(parameters.selectedNodeForEdgeColor)}else{g.fill(parameters.colorNode)}}if(parameters.sphereView){g.sphere(.5*parameters.nodeSize,parameters.sphereDetail,parameters.sphereDetail)}else{let rotation=g.easycam.getRotation();let rotXYZ=QuaternionToEuler(rotation[0],rotation[1],rotation[2],rotation[3]);g.rotateX(-rotXYZ[0]);g.rotateY(-rotXYZ[1]);g.rotateZ(-rotXYZ[2]);g.translate(0,0,10);g.stroke(0);g.strokeWeight(1);g.ellipse(0,0,parameters.nodeSize,parameters.nodeSize)}g.pop()}if(parameters.showText){g.fill(0,0,0);g.textAlign(CENTER,CENTER);g.textFont(font);g.textSize(30);if(this.graphLayout.layout3D){let rotation=g.easycam.getRotation();let rotXYZ=QuaternionToEuler(rotation[0],rotation[1],rotation[2],rotation[3]);g.push();g.translate(this.position.x,this.position.y,this.position.z);g.rotateX(-rotXYZ[0]);g.rotateY(-rotXYZ[1]);g.rotateZ(-rotXYZ[2]);g.translate(parameters.labelX,parameters.labelY,parameters.labelZ);g.text(this.labelText,0,0);g.pop()}else{g.push();g.translate(this.position.x,this.position.y,this.position.z);g.text(this.labelText,0,0);g.pop()}}}}class Edge{constructor(graphLayout,label,nodeFrom,nodeTo){this.graphLayout=graphLayout;this.graphics=graphLayout.graphics;this.label=label;this.nodeFrom=nodeFrom;this.nodeTo=nodeTo;this.subPoints=[];this.owner;if(Array.isArray(this.nodeFrom.label)&&Array.isArray(this.nodeTo.label)){if(this.nodeFrom.label[0]===this.nodeTo.label[0]){this.edgeType="robotBedge"}else if(this.nodeFrom.label[1]===this.nodeTo.label[1]){this.edgeType="robotAedge"}else{print("ERRRORR")}}else{this.edgeType="graphEdge"}}amountAlong(amount){return p5.Vector.lerp(this.nodeFrom.position,this.nodeTo.position,amount)}connectedTo(node){return node===this.nodeFrom||node===this.nodeTo}getPosition(amount){return p5.Vector.lerp(this.nodeFrom.position,this.nodeTo.position,amount)}show(g){if(this.owner===undefined){if(this.candidateForRobot===0){g.stroke(parameters.colorRobotA)}else if(this.candidateForRobot===1){g.stroke(parameters.colorRobotB)}else if(this.edgeType==="graphEdge"){g.stroke(parameters.colorGraphEdge)}else if(this.edgeType==="robotBedge"){g.stroke(parameters.colorRobotB)}else if(this.edgeType==="robotAedge"){g.stroke(parameters.colorRobotA)}}else{if(this.owner.index===0){g.stroke(parameters.colorRobotA)}else if(this.owner.index===1){g.stroke(parameters.colorRobotB)}else{g.stroke(0,255,0)}}if(this.edgeType==="graphEdge"){g.strokeWeight(parameters.edgeWidthGraph)}else{g.strokeWeight(parameters.edgeWidthConfigSpace)}g.line(this.nodeFrom.position.x,this.nodeFrom.position.y,this.nodeFrom.position.z,this.nodeTo.position.x,this.nodeTo.position.y,this.nodeTo.position.z);if(parameters.gridOn){let thisGranularity;if(this.edgeType==="graphEdge"){thisGranularity=1}else if(this.edgeType==="robotBedge"){thisGranularity=parameters.granularityFirstCoordinate}else if(this.edgeType==="robotAedge"){thisGranularity=parameters.granularitySecondCoordinate}for(let n=1;n<thisGranularity;n++){this.subPoints[n]=p5.Vector.lerp(this.nodeFrom.position,this.nodeTo.position,1*n/thisGranularity)}}}}class Square{constructor(graphLayout,label,edgeAfrom,edgeAto,edgeBfrom,edgeBto){this.graphLayout=graphLayout;this.graphics=graphLayout.graphics;this.label=label;this.edgeAfrom=edgeAfrom;this.edgeAto=edgeAto;this.edgeBfrom=edgeBfrom;this.edgeBto=edgeBto;this.subPoints=[];if(verbose)print("square created!");if(verbose)print(this)}getPosition(amountA,amountB){let X=edgeAfrom.amountAlong(amountA);let Y=edgeAto.amountAlong(amountA);return p5.Vector.lerp(X,Y,amountB)}show(){if(parameters.gridOn){this.graphics.strokeWeight(parameters.edgeWidthGrid);let firstGranularity=min(this.edgeAfrom.subPoints.length,parameters.granularityFirstCoordinate);for(let n=1;n<firstGranularity;n++){let a=this.edgeAfrom.subPoints[n];let b=this.edgeAto.subPoints[n];this.graphics.stroke(parameters.colorRobotA);this.graphics.line(a.x,a.y,a.z,b.x,b.y,b.z)}let secondGranularity=min(this.edgeBfrom.subPoints.length,parameters.granularitySecondCoordinate);for(let n=1;n<secondGranularity;n++){let a=this.edgeBfrom.subPoints[n];let b=this.edgeBto.subPoints[n];this.graphics.stroke(parameters.colorRobotB);this.graphics.line(a.x,a.y,a.z,b.x,b.y,b.z)}}if(parameters.squareOn){this.graphics.noStroke();this.graphics.fill(red(parameters.squareColor),green(parameters.squareColor),blue(parameters.squareColor),parameters.squareOpacity);this.graphics.beginShape();this.graphics.vertex(this.edgeAfrom.nodeFrom.position.x,this.edgeAfrom.nodeFrom.position.y,this.edgeAfrom.nodeFrom.position.z);this.graphics.vertex(this.edgeAfrom.nodeTo.position.x,this.edgeAfrom.nodeTo.position.y,this.edgeAfrom.nodeTo.position.z);this.graphics.vertex(this.edgeAto.nodeTo.position.x,this.edgeAto.nodeTo.position.y,this.edgeAto.nodeTo.position.z);this.graphics.vertex(this.edgeAto.nodeFrom.position.x,this.edgeAto.nodeFrom.position.y,this.edgeAto.nodeFrom.position.z);this.graphics.endShape(CLOSE)}}}class Robot{constructor(graph,node,index){this.graph=graph;this.nodeFrom=node;this.nodeTo=node;this.amount=0;this.index=index;this.visited=[]}occupyingNodes(){return[this.nodeFrom,this.nodeTo]}getCandidates(){return this.nodeFrom.neighbors.filter((x=>!this.graph.otherRobot(this).occupyingNodes().includes(x)))}getAllPossibleEdges(){let forbiddenNodes=this.graph.otherRobot(this).occupyingNodes().map((n=>n.label));return this.graph.edges.filter((x=>!forbiddenNodes.includes(x[0])&&!forbiddenNodes.includes(x[1])))}getRandomNeighbor(){let candidates=this.getCandidates();if(candidates.length>0){return candidates[floor(random(candidates.length))]}else{return false}}setNodeTo(node){this.visited.push(node);this.nodeTo=node;this.amount=1e-4;this.graph.graphLayout.getEdge(this.nodeFrom.label,this.nodeTo.label,false).owner=this}setNeighbor(node){this.nodeTo=node;this.graph.graphLayout.getEdge(this.nodeFrom.label,this.nodeTo.label,false).owner=this}setRandomNeighborIfPossible(){console.log("setRandomNeighborIfPossible");let candidates=this.getCandidates();if(candidates.length>0){this.nodeTo=candidates[floor(random(candidates.length))]}}setAmount(nextAmount){if(this.nodeFrom!==this.nodeTo){this.amount=constrain(nextAmount,0,1)}if(this.amount===0){if(verbose)console.log("this.amount === 0.0");if(verbose)console.log(this.nodeFrom.label+" "+this.nodeTo.label);if(verbose)console.log(this.graph.graphLayout.getEdge(this.nodeFrom.label,this.nodeTo.label,false));if(this.nodeFrom!==this.nodeTo){this.graph.graphLayout.getEdge(this.nodeFrom.label,this.nodeTo.label,false).owner=undefined;this.nodeTo=this.nodeFrom}if(parameters.moveDotsRandomly){let nextNode=this.getRandomNeighbor();if(nextNode){this.setNodeTo(nextNode)}else{return false}}}if(this.amount===1){if(verbose)console.log("this.amount === 1.0");if(verbose)console.log(this.nodeFrom.label+" "+this.nodeTo.label);if(verbose)console.log(this.graph.graphLayout.getEdge(this.nodeFrom.label,this.nodeTo.label,false));if(this.nodeFrom!==this.nodeTo){if(verbose)console.log("resetting!");this.graph.graphLayout.getEdge(this.nodeFrom.label,this.nodeTo.label,false).owner=undefined;this.amount=0;this.nodeFrom=this.nodeTo}}}getPosition(){return p5.Vector.lerp(this.nodeFrom.position,this.nodeTo.position,this.amount)}inANode(){return this.nodeFrom===this.nodeTo}show(g){let position=this.getPosition();if(this.nodeBorder){g.stroke(150);g.strokeWeight(parameters.graphRobotSize*this.graphLayout.nodeBorderWidth)}else{g.noStroke()}g.fill(this.index===0?parameters.colorRobotA:parameters.colorRobotB);if(this.graph.graphLayout.layout3D){g.push();g.translate(position.x,position.y,position.z);if(parameters.sphereView){let d=parameters.sphereDetail;g.sphere((this.active?.55:.5)*parameters.robotsNodeSize,d,d)}else{let rotation=g.easycam.getRotation();let rotXYZ=QuaternionToEuler(rotation[0],rotation[1],rotation[2],rotation[3]);g.rotateX(-rotXYZ[0]);g.rotateY(-rotXYZ[1]);g.rotateZ(-rotXYZ[2]);g.translate(0,0,20);g.ellipse(0,0,(this.active?1.1:1)*parameters.robotsNodeSize,(this.active?1.1:1)*parameters.robotsNodeSize)}g.pop()}}}class Configuration{constructor(graphLayout,robotA,robotB){this.graphLayout=graphLayout;this.robotA=robotA;this.robotB=robotB;this.history=[];this.updatePosition(this.robotA.nodeFrom,this.robotA.nodeTo,this.robotA.amount,this.robotB.nodeFrom,this.robotB.nodeTo,this.robotB.amount)}updatePosition(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB){this.position=this.getPosition(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB)}getPosition(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB){let position;if(amountA===0&&amountB===0){let stateLabel=[robotAfrom.label,robotBfrom.label];let state=this.graphLayout.getNode(stateLabel);position=state.position}else if(amountA>0&&amountB===0){let stateFromLabel=[robotAfrom.label,robotBfrom.label];let stateToLabel=[robotAto.label,robotBfrom.label];let stateFrom=this.graphLayout.getNode(stateFromLabel);let stateTo=this.graphLayout.getNode(stateToLabel);position=p5.Vector.lerp(stateFrom.position,stateTo.position,amountA)}else if(amountA===0&&amountB>0){let stateFromLabel=[robotAfrom.label,robotBfrom.label];let stateToLabel=[robotAfrom.label,robotBto.label];let stateFrom=this.graphLayout.getNode(stateFromLabel);let stateTo=this.graphLayout.getNode(stateToLabel);position=p5.Vector.lerp(stateFrom.position,stateTo.position,amountB)}else{let topLeft=this.graphLayout.getNode([robotAfrom.label,robotBfrom.label]).position;let topRight=this.graphLayout.getNode([robotAto.label,robotBfrom.label]).position;let botLeft=this.graphLayout.getNode([robotAfrom.label,robotBto.label]).position;let botRight=this.graphLayout.getNode([robotAto.label,robotBto.label]).position;let topX=p5.Vector.lerp(topLeft,topRight,amountA);let botX=p5.Vector.lerp(botLeft,botRight,amountA);position=p5.Vector.lerp(topX,botX,amountB)}return position}getCrosshair(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB){let topLeft=this.graphLayout.getNode([robotAfrom.label,robotBfrom.label]).position;let topRight=this.graphLayout.getNode([robotAto.label,robotBfrom.label]).position;let botLeft=this.graphLayout.getNode([robotAfrom.label,robotBto.label]).position;let botRight=this.graphLayout.getNode([robotAto.label,robotBto.label]).position;let topX=p5.Vector.lerp(topLeft,topRight,amountA);let botX=p5.Vector.lerp(botLeft,botRight,amountA);let leftY=p5.Vector.lerp(topLeft,botLeft,amountB);let rightY=p5.Vector.lerp(topRight,botRight,amountB);return[topX,botX,leftY,rightY]}getHyperplaneLine(robotFrom,robotTo,amount,possibleEdge,flip){if(flip){let topLeft=this.graphLayout.getNode([robotFrom.label,possibleEdge[0]]).position;let topRight=this.graphLayout.getNode([robotTo.label,possibleEdge[0]]).position;let botLeft=this.graphLayout.getNode([robotFrom.label,possibleEdge[1]]).position;let botRight=this.graphLayout.getNode([robotTo.label,possibleEdge[1]]).position;let topX=p5.Vector.lerp(topLeft,topRight,amount);let botX=p5.Vector.lerp(botLeft,botRight,amount);return[topX,botX]}else{let topLeft=this.graphLayout.getNode([possibleEdge[0],robotFrom.label]).position;let topRight=this.graphLayout.getNode([possibleEdge[0],robotTo.label]).position;let botLeft=this.graphLayout.getNode([possibleEdge[1],robotFrom.label]).position;let botRight=this.graphLayout.getNode([possibleEdge[1],robotTo.label]).position;let topX=p5.Vector.lerp(topLeft,topRight,amount);let botX=p5.Vector.lerp(botLeft,botRight,amount);return[topX,botX]}}record(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB){this.history.push([robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB])}resetHistory(){this.history=[]}show(){if(parameters.showHistory){for(let i=0;i<this.history.length-1;i++){let A=this.history[i];let B=this.history[i+1];let from=this.getPosition(A[0],A[1],A[2],A[3],A[4],A[5]);let to=this.getPosition(B[0],B[1],B[2],B[3],B[4],B[5]);this.graphLayout.graphics.stroke(0);this.graphLayout.graphics.strokeWeight(1);this.graphLayout.graphics.line(from.x,from.y,from.z,to.x,to.y,to.z)}}this.showAt(this.robotA.nodeFrom,this.robotA.nodeTo,this.robotA.amount,this.robotB.nodeFrom,this.robotB.nodeTo,this.robotB.amount)}showAt(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB){this.updatePosition(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB);let robotApossibilites=this.robotA.getAllPossibleEdges();let robotBpossibilites=this.robotB.getAllPossibleEdges();if(parameters.showHyperplanes){for(let possibleEdge of robotApossibilites){let c=this.getHyperplaneLine(robotBfrom,robotBto,amountB,possibleEdge,false);let a=c[0];let b=c[1];this.graphLayout.graphics.stroke(parameters.colorRobotA);this.graphLayout.graphics.strokeWeight(8);this.graphLayout.graphics.line(a.x,a.y,a.z,b.x,b.y,b.z)}for(let possibleEdge of robotBpossibilites){let c=this.getHyperplaneLine(robotAfrom,robotAto,amountA,possibleEdge,true);let a=c[0];let b=c[1];this.graphLayout.graphics.stroke(parameters.colorRobotB);this.graphLayout.graphics.strokeWeight(8);this.graphLayout.graphics.line(a.x,a.y,a.z,b.x,b.y,b.z)}}else{if(this.active){let crosshairs=this.getCrosshair(robotAfrom,robotAto,amountA,robotBfrom,robotBto,amountB);this.graphLayout.graphics.strokeWeight(8);if(crosshairs.length===4){let a=crosshairs[0];let b=crosshairs[1];this.graphLayout.graphics.stroke(parameters.colorRobotB);this.graphLayout.graphics.line(a.x,a.y,a.z,b.x,b.y,b.z);let c=crosshairs[2];let d=crosshairs[3];this.graphLayout.graphics.stroke(parameters.colorRobotA);this.graphLayout.graphics.line(c.x,c.y,c.z,d.x,d.y,d.z)}}}this.graphLayout.graphics.push();this.graphLayout.graphics.translate(this.position.x,this.position.y,this.position.z);this.graphLayout.graphics.noStroke();if(this.active){this.graphLayout.graphics.fill(parameters.activeDotColor)}else{this.graphLayout.graphics.fill(parameters.colorConfig)}if(parameters.sphereView){let d=parameters.sphereDetail;this.graphLayout.graphics.sphere(.5*parameters.configNodeSize,d,d)}else{let rotation=this.graphLayout.graphics.easycam.getRotation();let rotXYZ=QuaternionToEuler(rotation[0],rotation[1],rotation[2],rotation[3]);this.graphLayout.graphics.rotateX(-rotXYZ[0]);this.graphLayout.graphics.rotateY(-rotXYZ[1]);this.graphLayout.graphics.rotateZ(-rotXYZ[2]);this.graphLayout.graphics.translate(0,0,20);this.graphLayout.graphics.ellipse(0,0,parameters.configNodeSize,parameters.configNodeSize)}this.graphLayout.graphics.pop()}}function completeGraph(m){let nodes=[...Array(m).keys()];let edges=[];for(let F of nodes){for(let T of nodes){if(F!==T&&F<T){edges.push([F,T])}}}return new Graph(nodes,edges)}function chainGraph(m){let nodes=[...Array(m).keys()];let edges=[];for(let F of nodes){edges.push([F,(F+1)%m]);if(verbose)print(F)}return new Graph(nodes,edges)}function wheelGraph(m){let nodes=[...Array(m+1).keys()];let edges=[];for(let F of nodes){if(F!==m){edges.push([F,m])}edges.push([F,(F+1)%m]);if(verbose)print(F)}return new Graph(nodes,edges)}function completeBipartiteGraph(m,n){if(verbose)print("completeBipartiteGraph: "+m+" "+n);let nodesFrom=[...Array(m).keys()];let nodesTo=[...Array(n).keys()].map((x=>x+m));let nodes=[...Array(m+n).keys()];let edges=[];for(let F of nodesFrom){for(let T of nodesTo){edges.push([F,T])}}return new Graph(nodes,edges)}function addNode(x,y,z){let label=Math.max(...graph.nodes)+1;graph.nodes.push(label);let addedNode=graph.graphLayout.addNode(label,x,y,z);configuration_space.addStates(label);graph.graphLayout.centerForce=Math.max(.02,graph.graphLayout.centerForce);configuration_space.graphLayout.centerForce=Math.max(.02,configuration_space.graphLayout.centerForce);addSingleNodeMode=false;parameters.graphType="custom";updateURL();return addedNode}function deleteNode(node){for(neighbor of node.neighbors){neighbor.neighbors=neighbor.neighbors.filter((x=>!(x===node)))}graph.nodes.splice(graph.nodes.indexOf(node.label),1);let survivingEdgeLabels=[];let edgeLabelsToDelete=[];for(edge of graph.edges){if(edge.includes(node.label)){edgeLabelsToDelete.push(edge)}else{survivingEdgeLabels.push(edge)}}graph.edges=survivingEdgeLabels;for(edge of edgeLabelsToDelete){graph.graphLayout.deleteEdge(edge)}graph.graphLayout.deleteNode(node.label);configuration_space.removeStates(node.label);parameters.graphType="custom";updateURL()}function addEdge(nodeFrom,nodeTo){let label=[nodeFrom.label,nodeTo.label];graph.edges.push(label);graph.graphLayout.addEdge(label,nodeFrom,nodeTo);configuration_space.addStates(label);parameters.graphType="custom";updateURL()}function mouseWheel(event){if(areWeOnTheLeft){if(parameters.syncView)configuration_space.graphLayout.graphics.easycam.setState(graph.graphLayout.graphics.easycam.getState())}else{if(parameters.syncView)graph.graphLayout.graphics.easycam.setState(configuration_space.graphLayout.graphics.easycam.getState())}}let mouseIsPressedOnLeftSide=false;function mousePressedOnLeft(e){console.log("mousePressedOnLeft")}function mousePressed(e){areWeOnTheLeft=e.target===graphicsForGraph.canvas;if(verbose)console.log("mouse pressed");if(verbose)console.log(areWeOnTheLeft);if(verbose)console.log(parameters.mode);if(parameters.mode==="Move"||parameters.mode==="Edit"){if(parameters.mode==="Move"){let currentGraphics=areWeOnTheLeft?graphicsForGraph:graphicsForConfigurationSpace;let relativeMouseX=mouseX-currentGraphics.easycam.viewport[0]-currentGraphics.easycam.viewport[2]/2;let relativeMouseY=mouseY-currentGraphics.easycam.viewport[1]-currentGraphics.easycam.viewport[3]/2;let mousePos=createVector(relativeMouseX,relativeMouseY);let v=currentGraphics.easycam.getUpVector();cameraState=currentGraphics.easycam.getState();let selectedNode;let selectedDistance;if(parameters.mode==="Move"){{let upVectorRobotNode=createVector(v[0],v[1],v[2]).setMag(.5*parameters.robotsNodeSize);let robotAnode=graph.robotA;let robotBnode=graph.robotB;robotAnode.active=false;robotBnode.active=false;let robotAposition=robotAnode.getPosition();let robotBposition=robotBnode.getPosition();let screenPosA=currentGraphics.screenPosition(robotAposition);let screenPosB=currentGraphics.screenPosition(robotBposition);let distanceA=mousePos.dist(screenPosA);let distanceB=mousePos.dist(screenPosB);let auxPosA=currentGraphics.screenPosition(p5.Vector.add(robotAposition,upVectorRobotNode));let auxPosB=currentGraphics.screenPosition(p5.Vector.add(robotBposition,upVectorRobotNode));let screenRadiusA=screenPosA.dist(auxPosA);let screenRadiusB=screenPosB.dist(auxPosB);if(distanceA<screenRadiusA){selectedNode=robotAnode}else if(distanceB<screenRadiusB){selectedNode=robotBnode}}{let upVectorConfigNode=createVector(v[0],v[1],v[2]).setMag(.5*parameters.configNodeSize);let configNode=configuration_space.graphLayout.configuration;configNode.active=false;let screenPos=currentGraphics.screenPosition(configNode.position);let distance=mousePos.dist(screenPos);let auxPos=currentGraphics.screenPosition(p5.Vector.add(configNode.position,upVectorConfigNode));let screenRadius=screenPos.dist(auxPos);if(distance<screenRadius){selectedNode=configNode}}}if(selectedNode===undefined){let upVectorNode=createVector(v[0],v[1],v[2]).setMag(.5*parameters.nodeSize);let currentNodes=[].concat(graph.graphLayout.nodes).concat(configuration_space.graphLayout.nodes);for(let node of currentNodes){node.lastSelected=false}for(let node of currentNodes){node.active=false;let screenPos=currentGraphics.screenPosition(node.position);let distance=mousePos.dist(screenPos);let auxPos=currentGraphics.screenPosition(p5.Vector.add(node.position,upVectorNode));let screenRadius=screenPos.dist(auxPos);if(verbose)print(currentGraphics.screenPosition(node.position));if(distance<screenRadius&&(selectedNode===undefined||distance<selectedDistance)){selectedNode=node;selectedDistance=distance}}}if(selectedNode!==undefined){selectedNode.lastSelected=true;if(parameters.mode==="Edit"){if(nodeSelectedForEdgeAddition!==undefined){if(nodeSelectedForEdgeAddition!==selectedNode){if(graph.graphLayout.getEdge(nodeSelectedForEdgeAddition.label,selectedNode.label,false)===undefined){addEdge(nodeSelectedForEdgeAddition,selectedNode)}}nodeSelectedForEdgeAddition.firstNodeOfEdge=false;nodeSelectedForEdgeAddition=undefined}else{if(deleteNodeMode){if(!selectedNode.occupied()){deleteNode(selectedNode)}}else{nodeSelectedForEdgeAddition=selectedNode;selectedNode.firstNodeOfEdge=true}}}else if(parameters.mode==="Move"){selectedNode.active=true;if(verbose)console.log("selectedNode.active = true")}}else{if(parameters.mode==="Edit"){let addedNode=addNode();let currentGraphics=areWeOnTheLeft?graphicsForGraph:graphicsForConfigurationSpace;let relativeMouseX=mouseX-currentGraphics.easycam.viewport[0]-currentGraphics.easycam.viewport[2]/2;let relativeMouseY=mouseY-currentGraphics.easycam.viewport[1]-currentGraphics.easycam.viewport[3]/2;let mouse2D=createVector(relativeMouseX,relativeMouseY);for(let n=0;n<10;n++){let screenPosOfMovingNode=currentGraphics.screenPosition(addedNode.position);let mouseDiff=p5.Vector.sub(mouse2D,screenPosOfMovingNode);let dst=applyToVec3(cameraState.rotation,[mouseDiff.x,mouseDiff.y,0]);let xMovement=dst[0];let yMovement=dst[1];let zMovement=dst[2];let move=createVector(xMovement,yMovement,zMovement).setMag(mouseDiff.mag()*.5);addedNode.position.add(move)}}}}if(graph.robotA.active===true||graph.robotB.active===true){let activeRobot=graph.robotA.active===true?graph.robotA:graph.robotB;let possibleEdges=activeRobot.getAllPossibleEdges();for(let possibleEdge of possibleEdges){graph.graphLayout.getEdge(possibleEdge[0],possibleEdge[1]).candidateForRobot=activeRobot.index}}}else if(parameters.mode==="View"){reheat()}}function ourMouseDragged(){if(verbose)console.log("ourMouseDragged");if(parameters.mode==="Move"){reheat();let currentGraphics=areWeOnTheLeft?graphicsForGraph:graphicsForConfigurationSpace;let relativeMouseX=mouseX-currentGraphics.easycam.viewport[0]-currentGraphics.easycam.viewport[2]/2;let relativeMouseY=mouseY-currentGraphics.easycam.viewport[1]-currentGraphics.easycam.viewport[3]/2;let mouse2D=createVector(relativeMouseX,relativeMouseY);let movingObject,ordinaryNodeMoving;{if(graph.robotA.active===true||graph.robotB.active===true){let activeRobot=graph.robotA.active===true?graph.robotA:graph.robotB;if(activeRobot.inANode()){let robotScreenPos=currentGraphics.screenPosition(activeRobot.getPosition());let mouseChange=p5.Vector.sub(mouse2D,robotScreenPos);let candidates=activeRobot.getCandidates();let bestCandidate;let bestValue;for(let candidate of candidates){let screenPosOfCandidate=currentGraphics.screenPosition(candidate.position);let changeForCandidate=p5.Vector.sub(screenPosOfCandidate,robotScreenPos);let value=p5.Vector.dot(changeForCandidate,mouseChange)/(mouseChange.mag()*changeForCandidate.mag());let threshold=changeForCandidate.dot(mouseChange)/pow(changeForCandidate.mag(),2);if(threshold>.05){if(bestCandidate===undefined||value>bestValue){bestCandidate=candidate;bestValue=value}}}if(bestCandidate!==undefined){activeRobot.setNodeTo(bestCandidate)}}else{let robotScreenPos=currentGraphics.screenPosition(activeRobot.getPosition());let mouseChange=p5.Vector.sub(mouse2D,robotScreenPos).mult(.9);let nodeFromScreenPos=currentGraphics.screenPosition(activeRobot.nodeFrom.position);let nodeToScreenPos=currentGraphics.screenPosition(activeRobot.nodeTo.position);let edgeSomething=p5.Vector.sub(nodeToScreenPos,nodeFromScreenPos);let amountChange=edgeSomething.dot(mouseChange)/pow(edgeSomething.mag(),2);activeRobot.setAmount(activeRobot.amount+amountChange)}}else{if(verbose)console.log("moving node");for(let node of graph.graphLayout.nodes){if(node.active===true){ordinaryNodeMoving=node;if(verbose)console.log("movingNode = node");if(verbose)console.log(node)}}}}{if(configuration_space.graphLayout.configuration.active===true){movingObject=configuration_space.graphLayout.configuration;let configuration2D=graphicsForConfigurationSpace.screenPosition(movingObject.position);let mouseChange=p5.Vector.sub(mouse2D,configuration2D).mult(.9);let topLeft=configuration_space.graphLayout.getNode([movingObject.robotA.nodeFrom.label,movingObject.robotB.nodeFrom.label]).position;let topRight=configuration_space.graphLayout.getNode([movingObject.robotA.nodeTo.label,movingObject.robotB.nodeFrom.label]).position;let botLeft=configuration_space.graphLayout.getNode([movingObject.robotA.nodeFrom.label,movingObject.robotB.nodeTo.label]).position;let botRight=configuration_space.graphLayout.getNode([movingObject.robotA.nodeTo.label,movingObject.robotB.nodeTo.label]).position;if(flags[SHIFT]||flags[66]){if(movingObject.robotB.inANode()){let bestcandidate=pickBestCandidateForB(movingObject,mouseChange);if(bestcandidate!==undefined)movingObject.robotB.setNeighbor(bestcandidate)}else{let topX=p5.Vector.lerp(topLeft,topRight,movingObject.robotA.amount);let botX=p5.Vector.lerp(botLeft,botRight,movingObject.robotA.amount);let topX2D=graphicsForConfigurationSpace.screenPosition(topX);let botX2D=graphicsForConfigurationSpace.screenPosition(botX);let edgeBaux=p5.Vector.sub(botX2D,topX2D);let amountBchange=edgeBaux.dot(mouseChange)/pow(edgeBaux.mag(),2);movingObject.robotB.setAmount(movingObject.robotB.amount+amountBchange)}}if(flags[SHIFT]||flags[65]){if(movingObject.robotA.inANode()){let bestcandidate=pickBestCandidateForA(movingObject,mouseChange);if(bestcandidate!==undefined)movingObject.robotA.setNeighbor(bestcandidate)}else{let leftX=p5.Vector.lerp(topLeft,botLeft,movingObject.robotB.amount);let rightX=p5.Vector.lerp(topRight,botRight,movingObject.robotB.amount);let leftX2D=graphicsForConfigurationSpace.screenPosition(leftX);let rightX2D=graphicsForConfigurationSpace.screenPosition(rightX);let edgeAaux=p5.Vector.sub(rightX2D,leftX2D);let amountAchange=edgeAaux.dot(mouseChange)/pow(edgeAaux.mag(),2);movingObject.robotA.setAmount(movingObject.robotA.amount+amountAchange)}}}else{for(let node of configuration_space.graphLayout.nodes){if(node.active===true){ordinaryNodeMoving=node}}}}if(ordinaryNodeMoving!==undefined){if(verbose)console.log("moving ordinaryNodeMoving");let screenPosOfMovingNode=currentGraphics.screenPosition(ordinaryNodeMoving.position);let mouseChange=p5.Vector.sub(mouse2D,screenPosOfMovingNode);let dst=applyToVec3(cameraState.rotation,[mouseChange.x,mouseChange.y,0]);let camPos=currentGraphics.easycam.getPosition();let camPosVector=createVector(camPos[0],camPos[1],camPos[2]);let distToNode=ordinaryNodeMoving.position.dist(camPosVector);if(verbose)print(dst);let xMovement=dst[0];let yMovement=dst[1];let zMovement=dst[2];let move=createVector(xMovement,yMovement,zMovement).mult(.5*distToNode/cameraState.distance);ordinaryNodeMoving.position.add(move)}}else if(parameters.mode==="View"){if(areWeOnTheLeft){if(parameters.syncView)configuration_space.graphLayout.graphics.easycam.setState(graph.graphLayout.graphics.easycam.getState())}else{if(parameters.syncView)graph.graphLayout.graphics.easycam.setState(configuration_space.graphLayout.graphics.easycam.getState())}reheat()}}function pickBestCandidateForA(movingNode,mouseChange){let candidates=movingNode.robotA.getCandidates();let bestCandidate;let bestCandidateAngle=PI/2;for(let candidate of candidates){let topRight=configuration_space.graphLayout.getNode([candidate.label,movingNode.robotB.nodeFrom.label]).position;let botRight=configuration_space.graphLayout.getNode([candidate.label,movingNode.robotB.nodeTo.label]).position;let leftX=movingNode.position;let rightX=p5.Vector.lerp(topRight,botRight,movingNode.robotB.amount);let leftX2D=graphicsForConfigurationSpace.screenPosition(leftX);let rightX2D=graphicsForConfigurationSpace.screenPosition(rightX);let screenDiff=p5.Vector.sub(rightX2D,leftX2D);let screenDiffAngle=abs(mouseChange.angleBetween(screenDiff));if(screenDiffAngle<bestCandidateAngle){bestCandidate=candidate;bestCandidateAngle=screenDiffAngle}}return bestCandidate}function pickBestCandidateForB(movingNode,mouseChange){let candidates=movingNode.robotB.getCandidates();let bestCandidate;let bestCandidateAngle=PI/2;for(let candidate of candidates){let botLeft=configuration_space.graphLayout.getNode([movingNode.robotA.nodeFrom.label,candidate.label]).position;let botRight=configuration_space.graphLayout.getNode([movingNode.robotA.nodeTo.label,candidate.label]).position;let topX=movingNode.position;let botX=p5.Vector.lerp(botLeft,botRight,movingNode.robotA.amount);let topX2D=graphicsForConfigurationSpace.screenPosition(topX);let botX2D=graphicsForConfigurationSpace.screenPosition(botX);let screenDiff=p5.Vector.sub(botX2D,topX2D);let screenDiffAngle=abs(mouseChange.angleBetween(screenDiff));if(screenDiffAngle<bestCandidateAngle){bestCandidate=candidate;bestCandidateAngle=screenDiffAngle}}return bestCandidate}function mouseReleased(){configuration_space.graphLayout.configuration.active=false;for(let node of configuration_space.graphLayout.nodes){node.active=false}graph.robotA.active=false;graph.robotB.active=false;for(let node of graph.graphLayout.nodes){node.active=false}if(!(key==="a"||key==="b")){for(let edge of graph.graphLayout.edges){edge.candidateForRobot=undefined}}}function easyCamOff(){easyCamActive=false;if(verbose)print("easyCamOff");graphicsForConfigurationSpace.easycam.removeMouseListeners();graphicsForGraph.easycam.removeMouseListeners();forcesActive=false;configuration_space.graphLayout.moveToCenter=false;graph.graphLayout.moveToCenter=false}function easyCamOn(){easyCamActive=true;if(verbose)print("easyCamOn");graphicsForConfigurationSpace.easycam.attachMouseListeners(graphicsForConfigurationSpace._renderer);graphicsForGraph.easycam.attachMouseListeners(graphicsForGraph._renderer);forcesActive=true;configuration_space.graphLayout.moveToCenter=true;graph.graphLayout.moveToCenter=true}let flags={};function downKey(c){return flags[c.charCodeAt(0)]}function keyPressed(){flags[keyCode]=true;if(keyCode===SHIFT||key==="a"||key==="b"){parameters.mode="Move";updateMode()}if(key==="a"&&!downKey("B")||key==="b"&&!downKey("A")){let activeRobot=key==="a"?graph.robotA:graph.robotB;let possibleEdges=activeRobot.getAllPossibleEdges();for(let possibleEdge of possibleEdges){graph.graphLayout.getEdge(possibleEdge[0],possibleEdge[1]).candidateForRobot=activeRobot.index}}if(key==="R")init();else if(key==="e"){parameters.mode="Edit";updateMode()}else if(key===" ")running=!running;else if(key==="f")forcesActive=!forcesActive;else if(key==="t")parameters.showText=!parameters.showText;else if(key==="v")toggleView();else if(key==="g")toggleGUI(-1);else if(key==="0")toggleGUI(0);else if(key==="1")toggleGUI(1);else if(key==="2")toggleGUI(2);else if(key==="3")toggleGUI(3);else if(key==="n")addNode();else if(key==="d")deleteNodeMode=!deleteNodeMode;else if(key==="a")robotAmoving=!robotAmoving;else if(key==="b")robotBmoving=!robotBmoving;else if(key==="c")toggleForSelectedNode();else if(key==="s")takeScreenshotGraph=!takeScreenshotGraph;else if(key==="S")takeScreenshotConfigSpace=!takeScreenshotConfigSpace;else if(key==="w")writeToFile();else if(key==="r")readFromFile("graph.txt");else if(key==="m"){graphicsForConfigurationSpace.easycam.removeMouseListeners();graphicsForGraph.easycam.removeMouseListeners()}else if(key==="M"){graphicsForConfigurationSpace.easycam.attachMouseListeners(graphicsForConfigurationSpace._renderer);graphicsForGraph.easycam.attachMouseListeners(graphicsForGraph._renderer)}}function keyReleased(){flags[keyCode]=false;if(keyCode===SHIFT||key==="a"||key==="b"){parameters.mode="View";updateMode()}if(!downKey("A")&&!downKey("B")){for(let edge of graph.graphLayout.edges){edge.candidateForRobot=undefined}}}function applyToVec3(rot,vec){let dst;var[x,y,z]=vec;var[q0,q1,q2,q3]=rot;var s=q1*x+q2*y+q3*z;dst=[0,0,0];dst[0]=2*(q0*(x*q0-(q2*z-q3*y))+s*q1)-x;dst[1]=2*(q0*(y*q0-(q3*x-q1*z))+s*q2)-y;dst[2]=2*(q0*(z*q0-(q1*y-q2*x))+s*q3)-z;return dst}function limitVector(p,value){if(p.mag()>value){p.normalize().mult(value)}}function EulerToQuaternion(x,y,z){var cy=cos(z*.5);var sy=sin(z*.5);var cp=cos(y*.5);var sp=sin(y*.5);var cr=cos(x*.5);var sr=sin(x*.5);var qw=cy*cp*cr+sy*sp*sr;var qx=cy*cp*sr-sy*sp*cr;var qy=sy*cp*sr+cy*sp*cr;var qz=sy*cp*cr-cy*sp*sr;return[qw,qx,qy,qz]}function QuaternionToEuler(q0,q1,q2,q3){var sinr_cosp=+2*(q0*q1+q2*q3);var cosr_cosp=+1-2*(q1*q1+q2*q2);var x=atan2(sinr_cosp,cosr_cosp);var sinp=+2*(q0*q2-q3*q1);var y;if(abs(sinp)>=1)y=copysign(M_PI/2,sinp);else y=asin(sinp);var siny_cosp=+2*(q0*q3+q1*q2);var cosy_cosp=+1-2*(q2*q2+q3*q3);var z=atan2(siny_cosp,cosy_cosp);return[x,y,z]}function cartesianProductOf(){return Array.prototype.reduce.call(arguments,(function(a,b){var ret=[];a.forEach((function(a){b.forEach((function(b){ret.push(a.concat([b]))}))}));return ret}),[[]])}function labelToString(L){let result="";if(Array.isArray(L)){for(let l of L){result+=l+" "}result=result.slice(0,-1);return result}else{return L}}function checkIfArrayIsUnique(myArray){return myArray.length===new Set(myArray).size}const flatten=arr=>[].concat.apply([],arr);const product=(...sets)=>sets.reduce(((acc,set)=>flatten(acc.map((x=>set.map((y=>[...x,y])))))),[[]]);function arraysEqual(a1,a2){return JSON.stringify(a1)==JSON.stringify(a2)}function edgesContainEdge(edges,edge){for(let cand of edges){if(arraysEqual(cand,edge))return true;if(arraysEqual(cand,[edge[1],edge[0]]))return true}return false}function is_state(p){return checkIfArrayIsUnique(p.flat())}function toggleForSelectedNode(){console.log("toggleForSelectedNode");for(let node of graph.graphLayout.nodes){if(node.lastSelected===true){node.applyExtraCenterForce=!node.applyExtraCenterForce;if(!verbose)print(node.applyExtraCenterForce)}}for(let node of configuration_space.graphLayout.nodes){if(node.lastSelected===true){node.applyExtraCenterForce=!node.applyExtraCenterForce;if(!verbose)print(node.applyExtraCenterForce)}}}function toggleGUI(type){if(type===-1){if(gui.closed===true){gui.open()}else{gui.close()}}}function updateURL(){if(verbose)console.log("updateURL");if(verbose)console.log(history.pushState);if(history.pushState){let newurl=window.location.protocol+"//"+window.location.host+window.location.pathname+"?"+(parameters.graphType==="custom"?"graph=custom"+"&"+"nodes="+graph.nodes+"&"+"edges="+edgesToString(graph.edges):"graph="+parameters.graphType)+"&"+"view="+viewingStyle+"&"+"showgraph="+parameters.showGraph+"&"+"showconfigspace="+parameters.showConfigurationspace+"&"+"showrobots="+parameters.showRobots;window.history.pushState({path:newurl},"",newurl);if(verbose)console.log(newurl)}}function edgesToString(edges){let result="";for(let edge of edges){result+="["+edge+"],"}result=result.substr(0,result.length-1);return result}function setParametersFromURL(){if(verbose)console.log("setParametersFromURL");let str=getURL();let nodes,edges,graph;let edgesFromUrl=[];let parts=split(str,"?");if(parts.length!==2)return;let inputString=parts[1];let urlParameters={};for(let p of split(inputString,"&")){let parts=split(p,"=");urlParameters[parts[0]]=parts[1]}let viewStr=urlParameters["view"];if(viewStr==="single"){viewingStyle="single"}else if(viewStr==="dual"){viewingStyle="dual"}let showGraphStr=urlParameters["showgraph"];parameters.showGraph=showGraphStr!=="false";let showConfigStr=urlParameters["showconfigspace"];parameters.showConfigurationspace=showConfigStr!=="false";let showRobotsStr=urlParameters["showrobots"];parameters.showRobots=showRobotsStr!=="false";let graphStr=urlParameters["graph"];if(graphStr!==undefined&&graphStr!=="custom"){parameters.graphType=graphStr}else{let nodesStr=urlParameters["nodes"];if(nodesStr===undefined)return;nodes=nodesStr.split(",").map(Number);for(let n of nodes){if(isNaN(n))return}let edgesStr=urlParameters["edges"];if(verbose)console.log(edgesStr);if(edgesStr!==null)edgesStr=decodeURIComponent(edgesStr);if(verbose)console.log(edgesStr);if(edgesStr!==undefined&&edgesStr.charAt(0)=="["&&edgesStr.charAt(edgesStr.length-1)=="]"){if(verbose)console.log("🎉 success []");edgesStr=edgesStr.slice(1,-1);edgesFromUrl=edgesStr.split(/[^\d],[^\d]/).map((s=>s.split(",").map(Number)))}edges=[];for(let edge of edgesFromUrl){if(edge.length===2&&nodes.includes(edge[0])&&nodes.includes(edge[1])&&edge[0]!==edge[1]&&!edgesContainEdge(edges,edge)){edges.push(edge)}}if(nodes!==undefined){customGraph={};customGraph.nodes=nodes;customGraph.edges=edges;parameters.graphType="custom"}}}function updateInfoString(){infoStrings=[];infoStrings.push("Graph = "+parameters.graphType);infoStrings.push("Nodes = "+JSON.stringify(graph.nodes));infoStrings.push("Edges = "+JSON.stringify(graph.edges));let nodesWithExtraCenterForce=[];for(let node of graph.graphLayout.nodes){if(node.applyExtraCenterForce){nodesWithExtraCenterForce.push(node.label)}}infoStrings.push("Graph nodes with extra center force = "+JSON.stringify(nodesWithExtraCenterForce));let state=graphicsForConfigurationSpace.easycam.getState();infoStrings.push("Camera state = "+JSON.stringify(state));let globalParameters={};globalParameters["mode"]=parameters.mode;globalParameters["showGraph"]=parameters.showGraph;globalParameters["showConfigurationspace"]=parameters.showConfigurationspace;globalParameters["showRobots"]=parameters.showRobots;globalParameters["syncView"]=parameters.syncView;globalParameters["distinguishDots"]=parameters.distinguishDots;globalParameters["gridOn"]=parameters.gridOn;globalParameters["squareOn"]=parameters.squareOn;globalParameters["showHyperplanes"]=parameters.showHyperplanes;globalParameters["granularityFirstCoordinate"]=parameters.granularityFirstCoordinate;globalParameters["granularitySecondCoordinate"]=parameters.granularitySecondCoordinate;globalParameters["showText"]=parameters.showText;globalParameters["sphereView"]=parameters.sphereView;globalParameters["lights"]=parameters.lights;globalParameters["moveDotsRandomly"]=parameters.moveDotsRandomly;globalParameters["robotASpeed"]=parameters.robotASpeed;globalParameters["robotBSpeed"]=parameters.robotBSpeed;globalParameters["amountMultiplier"]=parameters.amountMultiplier;globalParameters["recordHistory"]=parameters.recordHistory;globalParameters["showHistory"]=parameters.showHistory;globalParameters["sphereDetail"]=parameters.sphereDetail;globalParameters["speedUp"]=parameters.speedUp;globalParameters["labelX"]=parameters.labelX;globalParameters["labelY"]=parameters.labelY;globalParameters["labelZ"]=parameters.labelZ;globalParameters["colorRobotA"]=parameters.colorRobotA;globalParameters["colorRobotB"]=parameters.colorRobotB;globalParameters["colorConfig"]=parameters.colorConfig;globalParameters["colorNode"]=parameters.colorNode;globalParameters["colorGraphEdge"]=parameters.colorGraphEdge;globalParameters["squareColor"]=parameters.squareColor;globalParameters["squareOpacity"]=parameters.squareOpacity;globalParameters["activeDotColor"]=parameters.activeDotColor;globalParameters["deleteNodeColor"]=parameters.deleteNodeColor;globalParameters["selectedNodeForEdgeColor"]=parameters.selectedNodeForEdgeColor;globalParameters["nodeSize"]=parameters.nodeSize;globalParameters["robotsNodeSize"]=parameters.robotsNodeSize;globalParameters["configNodeSize"]=parameters.configNodeSize;globalParameters["edgeWidthGraph"]=parameters.edgeWidthGraph;globalParameters["edgeWidthConfigSpace"]=parameters.edgeWidthConfigSpace;globalParameters["edgeWidthGrid"]=parameters.edgeWidthGrid;infoStrings.push("Parameters = "+JSON.stringify(globalParameters));let graphParameters={};graphParameters["edgelength"]=graph.graphLayout.edgelength;graphParameters["maxspeed"]=graph.graphLayout.maxspeed;graphParameters["cohesionthreshold"]=graph.graphLayout.cohesionthreshold;graphParameters["repulsion"]=graph.graphLayout.repulsion;graphParameters["separationFactor"]=graph.graphLayout.separationFactor;graphParameters["planarForce"]=graph.graphLayout.planarForce;graphParameters["centerForce"]=graph.graphLayout.centerForce;graphParameters["extraCenterForce"]=graph.graphLayout.extraCenterForce;graphParameters["moveToCenter"]=graph.graphLayout.moveToCenter;infoStrings.push("Graph parameters = "+JSON.stringify(graphParameters));let configSpaceParameters={};configSpaceParameters["firstCoordinateEdgeLength"]=configuration_space.graphLayout.firstCoordinateEdgeLength;configSpaceParameters["firstCoordinateForce"]=configuration_space.graphLayout.firstCoordinateForce;configSpaceParameters["secondCoordinateEdgeLength"]=configuration_space.graphLayout.secondCoordinateEdgeLength;configSpaceParameters["secondCoordinateForce"]=configuration_space.graphLayout.secondCoordinateForce;configSpaceParameters["firstCoordinateMirrorEdgeLength"]=configuration_space.graphLayout.firstCoordinateMirrorEdgeLength;configSpaceParameters["firstCoordinateMirrorForce"]=configuration_space.graphLayout.firstCoordinateMirrorForce;configSpaceParameters["secondCoordinateMirrorEdgeLength"]=configuration_space.graphLayout.secondCoordinateMirrorEdgeLength;configSpaceParameters["secondCoordinateMirrorForce"]=configuration_space.graphLayout.secondCoordinateMirrorForce;configSpaceParameters["coordinatePreference"]=configuration_space.graphLayout.coordinatePreference;configSpaceParameters["extraCenterPreference"]=configuration_space.graphLayout.extraCenterPreference;configSpaceParameters["maxspeed"]=configuration_space.graphLayout.maxspeed;configSpaceParameters["cohesionthreshold"]=configuration_space.graphLayout.cohesionthreshold;configSpaceParameters["repulsion"]=configuration_space.graphLayout.repulsion;configSpaceParameters["separationFactor"]=configuration_space.graphLayout.separationFactor;configSpaceParameters["centerForce"]=configuration_space.graphLayout.centerForce;configSpaceParameters["extraCenterForce"]=configuration_space.graphLayout.extraCenterForce;configSpaceParameters["moveToCenter"]=configuration_space.graphLayout.moveToCenter;infoStrings.push("Configuration space parameters = "+JSON.stringify(configSpaceParameters));for(let n of graph.nodes){infoStrings.push("Node position("+n+") = "+posToString(graph.graphLayout.getNode(n).position))}for(let n of configuration_space.graphLayout.nodes){infoStrings.push("Configuration position("+n.label+") = "+posToString(n.position))}let infoHTML="";infoHTML+="<pre>";for(let string of infoStrings){infoHTML+=string+"<br>"}infoHTML+="</pre>";infoDiv.html(infoHTML)}function writeToFile(){saveStrings(infoStrings,makeFileName("-parameters.txt"))}function readFromString(strings){let parametersFromFile={};for(let s of strings){if(s==="")continue;let parts=split(s," = ");if(parts.length!==2)continue;parametersFromFile[parts[0]]=parts[1]}parameters.graphType=parametersFromFile["Graph"];if(parameters.graphType==="custom"){customGraph={};customGraph.nodes=JSON.parse(parametersFromFile["Nodes"]);customGraph.edges=JSON.parse(parametersFromFile["Edges"])}let globalParametersString=parametersFromFile["Parameters"];let globalParameters=JSON.parse(globalParametersString);parameters.mode=globalParameters["mode"];parameters.showGraph=globalParameters["showGraph"];parameters.showConfigurationspace=globalParameters["showConfigurationspace"];parameters.showRobots=globalParameters["showRobots"];parameters.syncView=globalParameters["syncView"];parameters.distinguishDots=globalParameters["distinguishDots"];parameters.gridOn=globalParameters["gridOn"];parameters.squareOn=globalParameters["squareOn"];parameters.showHyperplanes=globalParameters["showHyperplanes"];parameters.granularityFirstCoordinate=globalParameters["granularityFirstCoordinate"];parameters.granularitySecondCoordinate=globalParameters["granularitySecondCoordinate"];parameters.showText=globalParameters["showText"];parameters.sphereView=globalParameters["sphereView"];parameters.lights=globalParameters["lights"];parameters.moveDotsRandomly=globalParameters["moveDotsRandomly"];parameters.robotASpeed=globalParameters["robotASpeed"];parameters.robotBSpeed=globalParameters["robotBSpeed"];parameters.amountMultiplier=globalParameters["amountMultiplier"];parameters.recordHistory=globalParameters["recordHistory"];parameters.showHistory=globalParameters["showHistory"];parameters.sphereDetail=globalParameters["sphereDetail"];parameters.speedUp=globalParameters["speedUp"];parameters.labelX=globalParameters["labelX"];parameters.labelY=globalParameters["labelY"];parameters.labelZ=globalParameters["labelZ"];parameters.colorRobotA=globalParameters["colorRobotA"];parameters.colorRobotB=globalParameters["colorRobotB"];parameters.colorConfig=globalParameters["colorConfig"];parameters.colorNode=globalParameters["colorNode"];parameters.colorGraphEdge=globalParameters["colorGraphEdge"];parameters.squareColor=globalParameters["squareColor"];parameters.squareOpacity=globalParameters["squareOpacity"];parameters.activeDotColor=globalParameters["activeDotColor"];parameters.deleteNodeColor=globalParameters["deleteNodeColor"];parameters.selectedNodeForEdgeColor=globalParameters["selectedNodeForEdgeColor"];parameters.nodeSize=globalParameters["nodeSize"];parameters.robotsNodeSize=globalParameters["robotsNodeSize"];parameters.configNodeSize=globalParameters["configNodeSize"];parameters.edgeWidthGraph=globalParameters["edgeWidthGraph"];parameters.edgeWidthConfigSpace=globalParameters["edgeWidthConfigSpace"];parameters.edgeWidthGrid=globalParameters["edgeWidthGrid"];init();let graphNodesWithExtraCenterForce=JSON.parse(parametersFromFile["Graph nodes with extra center force"]);for(let node of graphNodesWithExtraCenterForce){graph.graphLayout.getNode(node).applyExtraCenterForce=true}let graphParametersString=parametersFromFile["Graph parameters"];let graphParameters=JSON.parse(graphParametersString);graph.graphLayout.edgelength=graphParameters["edgelength"];graph.graphLayout.maxspeed=graphParameters["maxspeed"];graph.graphLayout.cohesionthreshold=graphParameters["cohesionthreshold"];graph.graphLayout.repulsion=graphParameters["repulsion"];graph.graphLayout.separationFactor=graphParameters["separationFactor"];graph.graphLayout.planarForce=graphParameters["planarForce"];graph.graphLayout.centerForce=graphParameters["centerForce"];graph.graphLayout.extraCenterForce=graphParameters["extraCenterForce"];graph.graphLayout.moveToCenter=graphParameters["moveToCenter"];infoStrings.push("Graph parameters = "+JSON.stringify(graphParameters));let configSpaceParametersString=parametersFromFile["Configuration space parameters"];let configSpaceParameters=JSON.parse(configSpaceParametersString);configuration_space.graphLayout.firstCoordinateEdgeLength=configSpaceParameters["firstCoordinateEdgeLength"];configuration_space.graphLayout.firstCoordinateForce=configSpaceParameters["firstCoordinateForce"];configuration_space.graphLayout.secondCoordinateEdgeLength=configSpaceParameters["secondCoordinateEdgeLength"];configuration_space.graphLayout.secondCoordinateForce=configSpaceParameters["secondCoordinateForce"];configuration_space.graphLayout.firstCoordinateMirrorEdgeLength=configSpaceParameters["firstCoordinateMirrorEdgeLength"];configuration_space.graphLayout.firstCoordinateMirrorForce=configSpaceParameters["firstCoordinateMirrorForce"];configuration_space.graphLayout.secondCoordinateMirrorEdgeLength=configSpaceParameters["secondCoordinateMirrorEdgeLength"];configuration_space.graphLayout.secondCoordinateMirrorForce=configSpaceParameters["secondCoordinateMirrorForce"];configuration_space.graphLayout.coordinatePreference=configSpaceParameters["coordinatePreference"];configuration_space.graphLayout.extraCenterPreference=configSpaceParameters["extraCenterPreference"];configuration_space.graphLayout.maxspeed=configSpaceParameters["maxspeed"];configuration_space.graphLayout.cohesionthreshold=configSpaceParameters["cohesionthreshold"];configuration_space.graphLayout.repulsion=configSpaceParameters["repulsion"];configuration_space.graphLayout.separationFactor=configSpaceParameters["separationFactor"];configuration_space.graphLayout.centerForce=configSpaceParameters["centerForce"];configuration_space.graphLayout.extraCenterForce=configSpaceParameters["extraCenterForce"];configuration_space.graphLayout.moveToCenter=configSpaceParameters["moveToCenter"];infoStrings.push("Configuration space parameters = "+JSON.stringify(configSpaceParameters));initGUI();for(let n of graph.nodes){let node=graph.graphLayout.getNode(n);let coordinates=parametersFromFile["Node position("+n+")"];if(coordinates!==undefined&&coordinates.charAt(0)=="["&&coordinates.charAt(coordinates.length-1)=="]"){coordinates=coordinates.slice(1,-1);coordinates=coordinates.split(",").map(Number)}console.log(coordinates);node.position=createVector(coordinates[0],coordinates[1],coordinates[2])}for(let node of configuration_space.graphLayout.nodes){let coordinates=parametersFromFile["Configuration position("+node.label[0]+","+node.label[1]+")"];if(coordinates!==undefined&&coordinates.charAt(0)=="["&&coordinates.charAt(coordinates.length-1)=="]"){coordinates=coordinates.slice(1,-1);coordinates=coordinates.split(",").map(Number)}console.log(coordinates);node.position=createVector(coordinates[0],coordinates[1],coordinates[2])}let cameraStateString=parametersFromFile["Camera state"];graphicsForConfigurationSpace.easycam.setState(JSON.parse(cameraStateString));parameters.mode="Move";updateMode()}function readFromFile(fileName){loadStrings(fileName,readFromString)}function posToString(pos){return"["+pos.x+","+pos.y+","+pos.z+"]"}function handleFile(file){let str=file.data;let strings=str.split("\n");readFromString(strings)}
+const a0_0x137b = ['\x20\x20qtree\x20nodes:\x20', 'C(7)', 'K(2,2)', 'K(2)', 'K(5)', 'LLF', 'selectedNodeForEdgeColor', 'disable', 'updatePosition', 'robotAedge', 'viewport', 'inputDiv', 'getElementById', 'robotBedge', 'hide', 'updating', 'noStroke', 'repulsion', 'Configuration\x20space\x20parameters', 'colorMode', 'Configuration\x20space\x20parameters\x20=\x20', 'ULF', 'Show\x20hyperplanes', 'colorRobotA', 'Graph\x20edge\x20width', 'K(3,3)', 'getEdge', 'offsetWidth', 'dualView', 'push', 'graph=custom&nodes=', '🎉\x20success\x20[]', 'addFolder', '#4499ee', 'state_1:', 'sphere', 'source', 'Show\x20square\x20grids', 'edgelength', 'robotASpeed', 'C(6)', 'OBJindex', 'states', 'loops\x20loaded', 'configNodeSize', 'size', 'Show\x20loops', 'Repulsion', 'getSquare', 'graphEdgeForce', 'W(9)', 'graphics', 'loops', 'setNeighbor', 'adding\x20edge\x20', 'location', 'Show\x20robots', 'length', 'return\x20(function()\x20', 'keyboardactive', 'intersects', 'firstCoordinateEdgeLength', 'getNode', 'showHyperplanes', 'K(2,6)', 'host', 'rotateX', 'K(1,2)', 'moveToCenter', 'addEdge', 'labelText', '\x20=\x20-\x20', 'Show\x20graph\x20in\x20configuration\x20space', 'dist', 'single', 'addButton', 'this.amount\x20===\x200.0', 'parameters.dualView\x20=\x20', 'edgeBfrom', '\x0athis.LRF.boundary\x20=\x20', 'Coordinate\x20preference', 'graph', 'squareOn', 'connectToDiagonally', 'URF', 'edgeWidthConfigSpace', 'change\x20in\x20panel', 'addNode', 'W(10)', 'getSpringForce', 'owner', 'setMag', 'getHyperplaneLine', 'nodeSize', 'granularitySecondCoordinate', 'separationFactor', 'protocol', 'Target\x20edge\x20length', 'W(7)', 'configuration_space', 'rotation', 'insert', 'initGraph:\x20', 'Show\x20configuration\x20space', 'Separation\x20factor', 'sphereView', 'K(1,9)', 'neighbors', 'update', 'graphType', 'firstCoordinateMirrorForce', 'layout3D', 'removeMouseListeners', 'amountAlong', '-graph', 'nodeFrom:', 'showHistory', 'html', 'Configuration\x20position(', '#6600ff', 'W(5)', 'box', 'indexOf', 'split', 'showNodes', 'extraCenterPreference', '.png', 'moveRobots', 'calculateMass', 'insertInOctant', 'Choose\x20graph', 'deleteNode', 'getRandomNeighbor', '-configspace', 'Graph\x20parameters', 'use\x20strict', 'dot', 'Force\x20for\x20second\x20coordinate\x20edge', 'LRB', 'configspace', '_renderer', '\x0athis.URF.boundary\x20=\x20', 'addSquare', '-parameters', '__proto__', 'hidden', 'candidateForRobot', 'resetHistory', 'General\x20settings', 'K(1,8)', 'getPosition', 'connectTo', 'concat', 'gridOn', 'translate', 'endShape', 'mult', 'lights', '\x0athis.ULB.boundary\x20=\x20', 'C(2)', 'Max\x20node\x20speed', 'closed', '\x20y=', 'LRF', 'target', 'acceleration', '.gen', '#4455bb', 'Layout\x20presets', 'Graph\x20layout\x20settings', 'sphereDetail', 'showconfigspace', 'K(1,1)', 'First\x20coordinate\x20target\x20edge\x20length', 'show', 'Parameters\x20=\x20', 'Neighbor\x20attraction\x20threshold', 'moveDotsRandomly', 'alive', 'States:', 'max', 'layout-00.txt', '1BsFkqd', 'slice', 'Graph\x20nodes\x20with\x20extra\x20center\x20force\x20=\x20', '<br>', 'W(4)', '^([^\x20]+(\x20+[^\x20]+)+)+[^\x20]}', 'flat', 'remove', 'coordinatePreference', 'parent', 'amount', 'directionalLight', 'antialias', 'nodes', 'C(5)', 'Edges', 'Edit', 'layoutPreset', 'K(4)', 'showAt', 'recordHistory', 'initlayout', 'vertex', 'C(4)', 'info', '\x20=\x20', 'clear', 'colorGraphEdge', 'labelX', 'type', 'keys', 'log', 'noFill', 'level', 'Nodes', 'deleteEdge', '</pre>', 'addStateToGraphLayout', 'canvas', 'FOUND!', 'txt', 'cohesionthreshold', 'nodeTo', 'K(6)', 'secondCoordinateForce', 'reduce', 'history', 'getRotation', 'firstCoordinateForce', 'inANode', 'Vector', 'Force\x20for\x20first\x20coordinate\x20edge', 'webgl', 'rotateY', 'mag', 'beginShape', 'console', 'edgeWidthGraph', 'boundary', 'C(3)', 'setAmount', '130279ywrXoP', 'showRobots', '1iianPa', 'strokeWeight', 'distance', 'connectedTo', 'createGraphLayout', 'Extra\x20center\x20preference', 'Center\x20Force', 'ambientLight', '\x0athis.LRB.boundary\x20=\x20', 'setDistanceMax', 'Node\x20size', 'robotBSpeed', 'moving\x20node', 'set', 'occupyingNodes', 'colorNode', 'robotB', 'showInfo', 'change', 'otherRobot', '-layout', 'filter', 'K(4,4)', 'dimension\x200\x0a', 'dimension', 'K(2,3)', 'K(2,4)', 'getForceTowardsGoal', '67491vBPcSY', 'ERRRORR', 'close', 'edges', 'K(1,5)', 'tweakpane', 'showText', 'children', '94069dXfbTE', 'random', 'movingNode\x20=\x20node', 'Move', 'robotA', 'velocity', 'constructor', 'getState', 'call', 'getAllPossibleEdges', 'rect', 'Robot\x20size', '\x20h=', 'selectedNode.active\x20=\x20true', 'edgeBto', 'showLoops', 'visited', 'setNodeTo', '#\x20vertex\x20', 'configuration', 'nodeBorderWidth', 'LLB', 'layoutGraph', 'Graph\x20nodes\x20with\x20extra\x20center\x20force', 'smooth', 'ourMouseDragged', 'nodeBorder', 'insertInOctant:\x20not\x20in\x20any\x20octant:\x20', 'extraCenterForce', 'custom', 'elt', 'Grid\x20square\x20granularity\x20#1', 'pixelDensity', 'occupied', 'Node\x20position(', 'syncView', 'toString', '#000000', 'div', 'W(6)', 'edgeAfrom', 'counter', 'centerMass', 'edgeAto', 'error', 'stringify', 'center', 'secondCoordinateEdgeLength', '#bb0000', 'index', '142887LyNIAk', 'Second\x20projection\x20bias', 'catalog/', 'Configuration\x20space\x20layout\x20settings', 'table', 'getAllNodesForces', 'false', 'enable', 'getCandidates', 'parse', 'distinguishDots', 'calculateMass:\x20state\x20unknown', 'move\x20mode', 'apply', 'layout-02.txt', 'frozen', '30384eVYkQO', '216226TIrjcR', 'bind', 'labelY', 'getCrosshair', 'network\x20nodes:\x20', 'squareneighbors', 'fonts/cmunbx.otf', 'connecting:', 'state', 'position', 'granularityFirstCoordinate', 'Graph', 'addEventListener', 'Move\x20robots', 'layout-01.txt', 'offsetHeight', 'easyCamOn', 'innerHTML', '\x0athis.ULF.boundary\x20=\x20', 'record', 'octree', 'splice', 'addStates', 'return\x20/\x22\x20+\x20this\x20+\x20\x22/', 'K(1,7)', '<pre>', 'K(1,6)', 'getDegree', 'screenPosition', 'refresh', 'getRobots', '\x20-\x20', 'completeBipartiteGraph:\x20', 'robotsNodeSize', 'maxspeed', 'attachMouseListeners', 'warn', 'getContext', 'centerForce', '\x20+\x20', 'amountMultiplier', 'applyExtraCenterForce', '1gsdlRr', 'forEach', '\x20#\x20', 'Node\x20color', 'map', 'adding\x20node\x20', 'setRandomNeighborIfPossible', 'labelZ', 'subPoints', '#999999', 'planarForce', 'insert:\x20state\x20unknown', 'activeDotColor', 'stroke', 'secondCoordinateMirrorForce', '\x20w=', 'First\x20projection\x20bias', 'URB', 'speedUp', 'showConfiguration', 'open', '&view=', 'Sphere\x20detail', 'normalize', 'setState', 'edgeWidthGrid', 'active', 'removeStates', 'pushState', 'squareOpacity', 'add', 'fill', 'subdivide', 'debugMode', 'colorRobotB', 'addInput', 'Show\x20info', 'text', '#cc7700', '\x0a\x0adimension\x202\x0a', 'Grid\x20edge\x20width', 'line', 'rotateZ', 'Graph\x20parameters\x20=\x20', 'nodeFrom', 'lerp', 'squareColor', ')\x20=\x20', 'setParametersFromURL', '#444444', 'deleteSquare', 'Visual\x20settings', 'squares', 'charAt', 'showEdges', 'colorConfig', 'getEdge:\x20', 'centerOfMass', 'angleBetween', '\x0athis.URB.boundary\x20=\x20', 'heat', 'label', 'sub', 'mousePressedOnLeft', 'dual', 'getSeparationFromNodes', 'mode', 'cohesionFactor', 'move', 'ULB', 'isArray', 'returning\x20false', 'color', 'showConfigurationspace', 'graphEdge', 'obj', 'deleteNodeColor', 'chn', '120308pLvNFx', 'setWheelScale', '{}.constructor(\x22return\x20this\x22)(\x20)', 'showGraph', 'Extra\x20center\x20force', 'lastSelected', 'includes', 'ellipse', '\x20d=', 'resetting!', 'easycam', 'K(3)', 'edgeType', 'DEPTH_TEST', 'K(2,5)', 'showSquares', 'graphLayout', 'pop', 'textSize', 'Motion\x20settings', 'Planar\x20force', 'View', 'Show\x20text\x20(t)', 'updateOctree', 'contains'];
+const a0_0x5310b3 = a0_0x96fc;
+(function (_0x2e7ed2, _0x5d7239) {
+  const _0x37cfa9 = a0_0x96fc;
+  while (!![]) {
+    try {
+      const _0x548ded = parseInt(_0x37cfa9(0xf5)) * -parseInt(_0x37cfa9(0x1c4)) + parseInt(_0x37cfa9(0x259)) * -parseInt(_0x37cfa9(0x203)) + parseInt(_0x37cfa9(0x269)) + parseInt(_0x37cfa9(0x227)) + parseInt(_0x37cfa9(0x201)) + -parseInt(_0x37cfa9(0x294)) * parseInt(_0x37cfa9(0x21f)) + parseInt(_0x37cfa9(0x26a));
+      if (_0x548ded === _0x5d7239) break;
+      else _0x2e7ed2['push'](_0x2e7ed2['shift']());
+    } catch (_0x34bb15) {
+      _0x2e7ed2['push'](_0x2e7ed2['shift']());
+    }
+  }
+}(a0_0x137b, 0x223f0));
+const a0_0x168eb8 = function () {
+  let _0x123141 = !![];
+  return function (_0x87e21, _0x44d15b) {
+    const _0x1d5e17 = _0x123141 ? function () {
+      const _0x20cc4b = a0_0x96fc;
+      if (_0x44d15b) {
+        const _0x30dfbd = _0x44d15b[_0x20cc4b(0x266)](_0x87e21, arguments);
+        return _0x44d15b = null, _0x30dfbd;
+      }
+    } : function () { };
+    return _0x123141 = ![], _0x1d5e17;
+  };
+}(), a0_0x592c28 = a0_0x168eb8(this, function () {
+  const _0x3f77c9 = function () {
+    const _0x2539eb = a0_0x96fc, _0x5e85f4 = _0x3f77c9['constructor'](_0x2539eb(0x281))()[_0x2539eb(0x22d)](_0x2539eb(0x1c9));
+    return !_0x5e85f4['test'](a0_0x592c28);
+  };
+  return _0x3f77c9();
+});
+a0_0x592c28();
+const a0_0x4806bc = function () {
+  let _0x3e85d7 = !![];
+  return function (_0x55f466, _0x28b2b8) {
+    const _0x45722e = _0x3e85d7 ? function () {
+      const _0x3ba6cd = a0_0x96fc;
+      if (_0x28b2b8) {
+        const _0x547ba2 = _0x28b2b8[_0x3ba6cd(0x266)](_0x55f466, arguments);
+        return _0x28b2b8 = null, _0x547ba2;
+      }
+    } : function () { };
+    return _0x3e85d7 = ![], _0x45722e;
+  };
+}(), a0_0x585fcb = a0_0x4806bc(this, function () {
+  const _0x5c9553 = a0_0x96fc;
+  let _0x22dc59;
+  try {
+    const _0x1bb7b1 = Function(_0x5c9553(0x148) + _0x5c9553(0xf7) + ');');
+    _0x22dc59 = _0x1bb7b1();
+  } catch (_0x4e1f87) {
+    _0x22dc59 = window;
+  } const _0x548ac3 = _0x22dc59[_0x5c9553(0x1fc)] = _0x22dc59[_0x5c9553(0x1fc)] || {}, _0x524377 = ['log', _0x5c9553(0x28e), _0x5c9553(0x1dc), 'error', 'exception', _0x5c9553(0x25d), 'trace'];
+  for (let _0x1f4c7e = 0x0;
+    _0x1f4c7e < _0x524377['length'];
+    _0x1f4c7e++) {
+      const _0x5ef536 = a0_0x4806bc[_0x5c9553(0x22d)]['prototype'][_0x5c9553(0x26b)](a0_0x4806bc), _0x329010 = _0x524377[_0x1f4c7e], _0xd61d8f = _0x548ac3[_0x329010] || _0x5ef536;
+    _0x5ef536[_0x5c9553(0x19e)] = a0_0x4806bc[_0x5c9553(0x26b)](a0_0x4806bc), _0x5ef536[_0x5c9553(0x24b)] = _0xd61d8f[_0x5c9553(0x24b)][_0x5c9553(0x26b)](_0xd61d8f), _0x548ac3[_0x329010] = _0x5ef536;
+  }
+});
+a0_0x585fcb();
+let syncViewToggle, graph;
+function initGUI() {
+  const _0x28ef8c = a0_0x96fc;
+  document[_0x28ef8c(0x11a)](_0x28ef8c(0x224))[_0x28ef8c(0x27b)] = '', tweakpane = new Tweakpane({ 'container': document[_0x28ef8c(0x11a)]('tweakpane') });
+  const _0x2698b7 = tweakpane[_0x28ef8c(0x12e)]({ 'title': _0x28ef8c(0x1a2), 'expanded': !0x0 });
+  _0x2698b7[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x17b), { 'label': _0x28ef8c(0x190), 'options': { 'K(1,1)': _0x28ef8c(0x1ba), 'K(1,2)': _0x28ef8c(0x151), 'K(1,3)': 'K(1,3)', 'K(1,4)': 'K(1,4)', 'K(1,5)': _0x28ef8c(0x223), 'K(1,6)': _0x28ef8c(0x284), 'K(1,7)': _0x28ef8c(0x282), 'K(1,8)': _0x28ef8c(0x1a3), 'K(1,9)': _0x28ef8c(0x178), 'K(1,10)': 'K(1,10)', 'K(2,2)': _0x28ef8c(0x110), 'K(2,3)': _0x28ef8c(0x21c), 'K(2,4)': _0x28ef8c(0x21d), 'K(2,5)': _0x28ef8c(0x103), 'K(2,6)': _0x28ef8c(0x14e), 'K(3,3)': _0x28ef8c(0x127), 'K(3,4)': 'K(3,4)', 'K(4,4)': _0x28ef8c(0x219), 'K(2)': _0x28ef8c(0x111), 'K(3)': _0x28ef8c(0x100), 'K(4)': _0x28ef8c(0x1d6), 'K(5)': _0x28ef8c(0x112), 'K(6)': _0x28ef8c(0x1ef), 'K(7)': 'K(7)', 'K(8)': 'K(8)', 'C(2)': _0x28ef8c(0x1ad), 'C(3)': _0x28ef8c(0x1ff), 'C(4)': _0x28ef8c(0x1db), 'C(5)': _0x28ef8c(0x1d2), 'C(6)': _0x28ef8c(0x136), 'C(7)': _0x28ef8c(0x10f), 'W(4)': _0x28ef8c(0x1c8), 'W(5)': _0x28ef8c(0x186), 'W(6)': _0x28ef8c(0x24e), 'W(7)': _0x28ef8c(0x170), 'W(8)': 'W(8)', 'W(9)': _0x28ef8c(0x140), 'W(10)': _0x28ef8c(0x166) } })['on'](_0x28ef8c(0x215), _0x18ae23 => {
+    const _0x375134 = _0x28ef8c;
+    parameters[_0x375134(0xe9)] = 'View', updateMode(), init();
+  }), _0x2698b7[_0x28ef8c(0xca)](parameters, _0x28ef8c(0xe9), { 'label': 'Choose\x20mode', 'options': { 'View': _0x28ef8c(0x10a), 'Move': 'Move', 'Edit': _0x28ef8c(0x1d4) } })['on'](_0x28ef8c(0x215), _0x4937fe => {
+    updateMode();
+  }), _0x2698b7['addInput'](parameters, _0x28ef8c(0x202), { 'label': _0x28ef8c(0x146) })['on'](_0x28ef8c(0x215), _0x377e49 => {
+    updateURL();
+  }), _0x2698b7[_0x28ef8c(0xca)](parameters, 'showGraph', { 'label': _0x28ef8c(0x156) })['on']('change', _0x4fbe20 => {
+    updateURL();
+  }), _0x2698b7[_0x28ef8c(0xca)](parameters, 'showConfigurationspace', { 'label': _0x28ef8c(0x175) })['on'](_0x28ef8c(0x215), _0x1971a2 => {
+    updateURL();
+  }), _0x2698b7[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x214), { 'label': _0x28ef8c(0xcb) })['on'](_0x28ef8c(0x215), _0x2d3156 => {
+    const _0x3db1cd = _0x28ef8c;
+    _0x2d3156['value'] ? infoDiv[_0x3db1cd(0x1bc)]() : infoDiv[_0x3db1cd(0x11c)]();
+  }), _0x2698b7['addInput'](parameters, 'gridOn', { 'label': _0x28ef8c(0x133) }), _0x2698b7['addInput'](parameters, _0x28ef8c(0x160), { 'label': 'Show\x20square\x20surfaces' }), _0x2698b7[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x236), { 'label': _0x28ef8c(0x13c) }), _0x2698b7[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x14d), { 'label': _0x28ef8c(0x124) }), _0x2698b7[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x225), { 'label': _0x28ef8c(0x10b) }), _0x2698b7[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x12a), { 'label': 'Dual\x20view' })['on']('change', _0x3b43f4 => {
+    const _0x1fd3f2 = _0x28ef8c;
+    console['log'](_0x1fd3f2(0x164)), console[_0x1fd3f2(0x1e3)](_0x1fd3f2(0x15b) + parameters[_0x1fd3f2(0x12a)]), setDualView(parameters[_0x1fd3f2(0x12a)]);
+  }), syncViewToggle = _0x2698b7['addInput'](parameters, _0x28ef8c(0x24a), { 'label': 'Sync\x20cameras' }), parameters['dualView'] || (syncViewToggle[_0x28ef8c(0x19f)] = !0x0);
+  const _0x2df8da = tweakpane[_0x28ef8c(0x12e)]({ 'title': _0x28ef8c(0xda), 'expanded': !0x1 });
+  _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x16b), { 'label': _0x28ef8c(0x20d), 'min': 0x0, 'max': 0x28 }), _0x2df8da[_0x28ef8c(0xca)](parameters, 'robotsNodeSize', { 'label': _0x28ef8c(0x232), 'min': 0x0, 'max': 0x28 }), _0x2df8da['addInput'](parameters, _0x28ef8c(0x13a), { 'label': 'Configuration\x20node\x20size', 'min': 0x0, 'max': 0x28 }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x1b8), { 'label': _0x28ef8c(0xbd), 'step': 0x1, 'min': 0x2, 'max': 0x28 }), _0x2df8da[_0x28ef8c(0xca)](parameters, 'edgeWidthGraph', { 'label': _0x28ef8c(0x126), 'min': 0x0, 'max': 0xa }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x163), { 'label': 'Configuration\x20edge\x20width', 'min': 0x0, 'max': 0xa }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0xc0), { 'label': _0x28ef8c(0xcf), 'min': 0x0, 'max': 0xa }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x274), { 'label': _0x28ef8c(0x246), 'min': 0x0, 'max': 0x50 }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x16c), { 'label': _0x28ef8c(0x246), 'min': 0x0, 'max': 0x50 }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x212), { 'label': _0x28ef8c(0xaa), 'view': _0x28ef8c(0xef) }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x125), { 'label': _0x28ef8c(0x125), 'view': _0x28ef8c(0xef) }), _0x2df8da[_0x28ef8c(0xca)](parameters, 'colorRobotB', { 'label': _0x28ef8c(0xc9), 'view': _0x28ef8c(0xef) }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0xde), { 'label': 'colorConfig', 'view': 'color' }), _0x2df8da['addInput'](parameters, _0x28ef8c(0x1df), { 'label': _0x28ef8c(0x1df), 'view': _0x28ef8c(0xef) }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0xd5), { 'label': 'squareColor', 'view': _0x28ef8c(0xef) }), _0x2df8da['addInput'](parameters, _0x28ef8c(0xc4), { 'label': _0x28ef8c(0xc4), 'min': 0x0, 'max': 0xff }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0xb3), { 'label': 'activeDotColor', 'view': _0x28ef8c(0xef) }), _0x2df8da['addInput'](parameters, _0x28ef8c(0xf3), { 'label': _0x28ef8c(0xf3), 'view': _0x28ef8c(0xef) }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x114), { 'label': _0x28ef8c(0x114), 'view': _0x28ef8c(0xef) }), _0x2df8da[_0x28ef8c(0xca)](parameters, _0x28ef8c(0xae), { 'label': _0x28ef8c(0xae), 'min': -0x64, 'max': 0x64 });
+  const _0x38e5ed = tweakpane['addFolder']({ 'title': _0x28ef8c(0x108), 'expanded': !0x1 });
+  _0x38e5ed[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x1bf), { 'label': _0x28ef8c(0x277) }), _0x38e5ed[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x292), { 'label': _0x28ef8c(0x292), 'min': 0x0, 'max': 0x1 }), _0x38e5ed[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x135), { 'label': _0x28ef8c(0x135), 'min': 0x0, 'max': 0x1 }), _0x38e5ed[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x20e), { 'label': _0x28ef8c(0x20e), 'min': 0x0, 'max': 0x1 }), _0x38e5ed[_0x28ef8c(0xca)](parameters, _0x28ef8c(0xb9), { 'label': _0x28ef8c(0xb9), 'min': 0x0, 'max': 0x1 }), _0x38e5ed[_0x28ef8c(0xca)](parameters, 'recordHistory', { 'label': _0x28ef8c(0x1d8) }), _0x38e5ed[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x182), { 'label': _0x28ef8c(0x182) }), _0x38e5ed[_0x28ef8c(0x159)]({ 'label': 'resetHistory', 'title': 'reset' })['on']('click', () => {
+    const _0x400cbf = _0x28ef8c;
+    configuration_space[_0x400cbf(0x105)][_0x400cbf(0x23a)][_0x400cbf(0x1a1)]();
+  });
+  const _0x299afe = tweakpane[_0x28ef8c(0x12e)]({ 'title': _0x28ef8c(0x1b7), 'expanded': !0x0 });
+  _0x299afe[_0x28ef8c(0xca)](graph[_0x28ef8c(0x105)], _0x28ef8c(0x134), { 'label': _0x28ef8c(0x16f), 'min': 0x1, 'max': 0x190 }), _0x299afe[_0x28ef8c(0xca)](graph['graphLayout'], 'graphEdgeForce', { 'label': 'Edge\x20force', 'min': 0x0, 'max': 0.1 }), _0x299afe[_0x28ef8c(0xca)](parameters, _0x28ef8c(0x28c), { 'label': _0x28ef8c(0x1ae), 'min': 0x0, 'max': 0x1e }), _0x299afe[_0x28ef8c(0xca)](graph[_0x28ef8c(0x105)], _0x28ef8c(0x1ed), { 'label': _0x28ef8c(0x1be), 'min': 0x0, 'max': 0x2 }), _0x299afe[_0x28ef8c(0xca)](graph[_0x28ef8c(0x105)], _0x28ef8c(0x11f), { 'label': _0x28ef8c(0x13d), 'min': 0x0, 'max': 0x186a0 }), _0x299afe['addInput'](graph['graphLayout'], _0x28ef8c(0x16d), { 'label': _0x28ef8c(0x176), 'min': 0x0, 'max': 0x514 }), _0x299afe['addInput'](graph['graphLayout'], _0x28ef8c(0xb1), { 'label': _0x28ef8c(0x109), 'min': 0x0, 'max': 0.15 }), _0x299afe['addInput'](graph[_0x28ef8c(0x105)], _0x28ef8c(0x290), { 'label': 'Center\x20force', 'min': 0x0, 'max': 0.15 }), _0x299afe['addInput'](graph[_0x28ef8c(0x105)], _0x28ef8c(0x243), { 'label': _0x28ef8c(0xf9), 'min': 0x0, 'max': 0.15 }), _0x299afe[_0x28ef8c(0xca)](graph[_0x28ef8c(0x105)], _0x28ef8c(0x152), { 'label': 'Adjust\x20to\x20center' });
+  const _0x59b49e = tweakpane['addFolder']({ 'title': _0x28ef8c(0x25c), 'expanded': !0x0 });
+  _0x59b49e['addInput'](parameters, 'layoutPreset', { 'label': _0x28ef8c(0x1b6), 'options': { 'Layout\x2000': _0x28ef8c(0x1c3), 'Layout\x2001': _0x28ef8c(0x278), 'Layout\x2002': _0x28ef8c(0x267) } })['on'](_0x28ef8c(0x215), _0x2044d2 => {
+    const _0xfc2245 = _0x28ef8c;
+    readLayoutFromFile(parameters[_0xfc2245(0x1d5)]);
+  }), _0x59b49e[_0x28ef8c(0xca)](configuration_space[_0x28ef8c(0x105)], 'firstCoordinateEdgeLength', { 'label': _0x28ef8c(0x1bb), 'min': 0x1, 'max': 0x3e8 }), _0x59b49e['addInput'](configuration_space[_0x28ef8c(0x105)], _0x28ef8c(0x1f4), { 'label': _0x28ef8c(0x1f7), 'min': 0x0, 'max': 0.1 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space[_0x28ef8c(0x105)], _0x28ef8c(0x256), { 'label': 'Second\x20coordinate\x20target\x20edge\x20length', 'min': 0x1, 'max': 0x3e8 }), _0x59b49e['addInput'](configuration_space['graphLayout'], 'secondCoordinateForce', { 'label': _0x28ef8c(0x197), 'min': 0x0, 'max': 0.1 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space[_0x28ef8c(0x105)], 'firstCoordinateMirrorForce', { 'label': _0x28ef8c(0xb7), 'min': -0.2, 'max': 0.2 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space[_0x28ef8c(0x105)], 'secondCoordinateMirrorForce', { 'label': _0x28ef8c(0x25a), 'min': -0.2, 'max': 0.2 }), _0x59b49e['addInput'](configuration_space[_0x28ef8c(0x105)], 'coordinatePreference', { 'label': _0x28ef8c(0x15e), 'min': -0.1, 'max': 0.1 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space[_0x28ef8c(0x105)], _0x28ef8c(0x18b), { 'label': _0x28ef8c(0x208), 'min': 0x0, 'max': 0.1 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space[_0x28ef8c(0x105)], _0x28ef8c(0x1ed), { 'label': _0x28ef8c(0x1be), 'min': 0x0, 'max': 0x2 }), _0x59b49e['addInput'](configuration_space[_0x28ef8c(0x105)], _0x28ef8c(0x11f), { 'label': 'Repulsion', 'min': 0x0, 'max': 0x186a0 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space['graphLayout'], _0x28ef8c(0x16d), { 'label': _0x28ef8c(0x176), 'min': 0x0, 'max': 0x514 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space[_0x28ef8c(0x105)], _0x28ef8c(0x290), { 'label': _0x28ef8c(0x209), 'min': 0x0, 'max': 0.15 }), _0x59b49e['addInput'](configuration_space[_0x28ef8c(0x105)], _0x28ef8c(0x243), { 'label': _0x28ef8c(0xf9), 'min': 0x0, 'max': 0.15 }), _0x59b49e[_0x28ef8c(0xca)](configuration_space['graphLayout'], 'moveToCenter', { 'label': 'Adjust\x20to\x20center' });
+} a0_0x5310b3(0x195);
+function a0_0x96fc(_0x2cfc88, _0x498939) {
+  _0x2cfc88 = _0x2cfc88 - 0xaa;
+  let _0x3fc418 = a0_0x137b[_0x2cfc88];
+  return _0x3fc418;
+} let graphicsForGraph, graphicsForConfigurationSpace, configuration_space, configuration_spaceLayout, cameraState, areWeOnTheLeft, font, infoStrings, layoutStrings, chooseFile, gui, customGraph, infoDiv, infoString, tweakpane, nodeSelectedForEdgeAddition, graphs = {}, easyCamActive = !0x0, temperature = 0x1, cold = 0.001, coolingRate = 0x0, parameters = {}, verbose = !0x1, running = !0x0, takeScreenshotGraph = !0x1, takeScreenshotConfigSpace = !0x1, forcesActive = !0x0, robotAmoving = !0x0, robotBmoving = !0x0, addSingleNodeMode = !0x1, deleteNodeMode = !0x1;
+function preload() {
+  const _0x534add = a0_0x5310b3;
+  font = loadFont(_0x534add(0x270));
+} function setup() {
+  const _0x472429 = a0_0x5310b3;
+  noCanvas(), setAttributes(_0x472429(0x1d0), !0x0), infoDiv = select('#info'), infoDiv[_0x472429(0x11c)](), chooseFile = createFileInput(handleFile), chooseFile['parent'](_0x472429(0x119)), initParameters(), setParametersFromURL(), init();
+} function resetCanvases() {
+  const _0x2ab946 = a0_0x5310b3;
+  void 0x0 !== graphicsForGraph && graphicsForGraph[_0x2ab946(0x1cb)](), void 0x0 !== graphicsForConfigurationSpace && graphicsForConfigurationSpace[_0x2ab946(0x1cb)]();
+} function initgraphicsForGraph(_0x3e0493, _0x219d23) {
+  const _0x1cdd2f = a0_0x5310b3;
+  graphicsForGraph = createGraphics(_0x3e0493, _0x219d23, WEBGL), graphicsForGraph[_0x1cdd2f(0x23f)](), graphicsForGraph[_0x1cdd2f(0x1cd)](_0x1cdd2f(0x15f)), graphicsForGraph['pixelDensity'](0x2), graphicsForGraph[_0x1cdd2f(0x1bc)](), setupEasyCam(graphicsForGraph, 0x1f4), addScreenPositionFunction(graphicsForGraph), verbose && console['log'](graphicsForGraph), graphicsForGraph[_0x1cdd2f(0x1ea)][_0x1cdd2f(0x276)]('click', mousePressedOnLeft);
+} function initgraphicsForConfigurationSpace(_0x52909a, _0x21abab) {
+  const _0x8ab82a = a0_0x5310b3;
+  graphicsForConfigurationSpace = createGraphics(_0x52909a, _0x21abab, WEBGL), graphicsForConfigurationSpace[_0x8ab82a(0x23f)](), graphicsForConfigurationSpace[_0x8ab82a(0x1cd)](_0x8ab82a(0x199)), graphicsForConfigurationSpace[_0x8ab82a(0x247)](0x2), graphicsForConfigurationSpace[_0x8ab82a(0x1bc)]();
+  let _0x39b353 = graphicsForConfigurationSpace[_0x8ab82a(0x1ea)][_0x8ab82a(0x28f)](_0x8ab82a(0x1f8));
+  _0x39b353[_0x8ab82a(0x115)](_0x39b353[_0x8ab82a(0x102)]), setupEasyCam(graphicsForConfigurationSpace, 0x1f4), addScreenPositionFunction(graphicsForConfigurationSpace);
+} function init() {
+  const _0x53bde7 = a0_0x5310b3;
+  initView(), initGraph(parameters[_0x53bde7(0x17b)]), initGUI();
+} function updateMode() {
+  const _0x596ef0 = a0_0x5310b3;
+  switch (parameters[_0x596ef0(0xe9)]) {
+    case 'View': easyCamOn(), deleteNodeMode = !0x1;
+      break;
+    case 'Move': console[_0x596ef0(0x1e3)](_0x596ef0(0x265)), easyCamOff(), deleteNodeMode = !0x1;
+      break;
+    case _0x596ef0(0x1d4): easyCamOff();
+  }tweakpane[_0x596ef0(0x287)]();
+} function setDualView(_0xa655b0) {
+  const _0x960edc = a0_0x5310b3;
+  parameters['dualView'] = _0xa655b0, parameters[_0x960edc(0x12a)] ? syncViewToggle['hidden'] = !0x1 : syncViewToggle[_0x960edc(0x19f)] = !0x0, init();
+} function initView() {
+  const _0x72504a = a0_0x5310b3;
+  if (resetCanvases(), parameters[_0x72504a(0x12a)] ? (initgraphicsForGraph(windowWidth / 0x2, windowHeight), initgraphicsForConfigurationSpace(windowWidth / 0x2, windowHeight)) : (initgraphicsForGraph(0x0, windowHeight), initgraphicsForConfigurationSpace(windowWidth, windowHeight)), parameters[_0x72504a(0x1ab)]) {
+    let _0x417a1b = 0xb4, _0x1f9655 = 0xb4;
+    graphicsForGraph[_0x72504a(0x20a)](_0x417a1b, _0x417a1b, _0x417a1b), graphicsForGraph[_0x72504a(0x1cf)](_0x1f9655, _0x1f9655, _0x1f9655, -0x1, 0x0, 0x0), graphicsForConfigurationSpace[_0x72504a(0x20a)](_0x417a1b, _0x417a1b, _0x417a1b), graphicsForConfigurationSpace['directionalLight'](_0x1f9655, _0x1f9655, _0x1f9655, -0x1, 0x0, 0x0);
+  }
+} function initParameters() {
+  const _0x27dbe1 = a0_0x5310b3;
+  parameters[_0x27dbe1(0x17b)] = _0x27dbe1(0x228), parameters[_0x27dbe1(0xe9)] = 'View', parameters['showGraph'] = !0x0, parameters['showConfigurationspace'] = !0x0, parameters['showInfo'] = !0x1, parameters[_0x27dbe1(0x202)] = !0x0, parameters[_0x27dbe1(0x236)] = !0x1, parameters['syncView'] = !0x0, parameters[_0x27dbe1(0xc8)] = !0x1, parameters[_0x27dbe1(0x263)] = !0x1, parameters[_0x27dbe1(0x1a7)] = !0x1, parameters[_0x27dbe1(0x1d5)] = _0x27dbe1(0x1c3), parameters['squareOn'] = !0x0, parameters[_0x27dbe1(0x14d)] = !0x0, parameters[_0x27dbe1(0x274)] = 0xa, parameters[_0x27dbe1(0x16c)] = 0xa, parameters[_0x27dbe1(0x225)] = !0x1, parameters[_0x27dbe1(0x177)] = !0x0, parameters[_0x27dbe1(0x1ab)] = !0x0, parameters['moveDotsRandomly'] = !0x1, parameters[_0x27dbe1(0x135)] = 0.1, parameters[_0x27dbe1(0x20e)] = 0.1, parameters[_0x27dbe1(0x292)] = 0.05, parameters[_0x27dbe1(0x1d8)] = !0x1, parameters[_0x27dbe1(0x182)] = !0x1, parameters[_0x27dbe1(0x12a)] = !0x1, parameters[_0x27dbe1(0x1b8)] = 0x14, parameters[_0x27dbe1(0x1a1)] = function () {
+    const _0x14736f = _0x27dbe1;
+    configuration_space[_0x14736f(0x105)][_0x14736f(0x23a)]['resetHistory']();
+  }, parameters[_0x27dbe1(0xb9)] = 0x1, parameters[_0x27dbe1(0x1e0)] = 0x0, parameters['labelY'] = 0x0, parameters['labelZ'] = 0x2, parameters[_0x27dbe1(0x125)] = _0x27dbe1(0x257), parameters[_0x27dbe1(0xc9)] = _0x27dbe1(0xd8), parameters['colorConfig'] = '#4499ee', parameters['colorNode'] = _0x27dbe1(0xb0), parameters['colorGraphEdge'] = _0x27dbe1(0x12f), parameters[_0x27dbe1(0xd5)] = _0x27dbe1(0x24c), parameters[_0x27dbe1(0xc4)] = 0x64, parameters[_0x27dbe1(0xb3)] = _0x27dbe1(0xcd), parameters[_0x27dbe1(0xf3)] = _0x27dbe1(0x185), parameters[_0x27dbe1(0x114)] = _0x27dbe1(0x1b5), parameters[_0x27dbe1(0x28c)] = 0x1e, parameters['nodeSize'] = 0x14, parameters[_0x27dbe1(0x28b)] = 0x15, parameters[_0x27dbe1(0x13a)] = 0x15, parameters[_0x27dbe1(0x1fd)] = 4.5, parameters[_0x27dbe1(0x163)] = 0x2, parameters['edgeWidthGrid'] = 0.4;
+} function draw() {
+  const _0x42301a = a0_0x5310b3;
+  if (temperature > cold && (tick(), graph['update'](), configuration_space['update']()), parameters[_0x42301a(0x1bf)]) {
+    for (let _0x47bd9a = 0x0;
+      _0x47bd9a < parameters['speedUp'];
+      _0x47bd9a++)graph['moveRobots']();
+  } graph[_0x42301a(0x1bc)](), configuration_space[_0x42301a(0x1bc)](), parameters[_0x42301a(0x214)] && updateInfoString(), takeScreenshotGraph && (takeScreenshotGraph = !0x1, saveCanvas(graph[_0x42301a(0x105)]['graphics'], makeFileName(_0x42301a(0x180)) + '.png')), takeScreenshotConfigSpace && (takeScreenshotConfigSpace = !0x1, saveCanvas(configuration_space['graphLayout']['graphics'], makeFileName(_0x42301a(0x193)) + _0x42301a(0x18c))), mouseIsPressed && ourMouseDragged();
+} function makeFileName(_0xc71483) {
+  const _0x5f5192 = a0_0x5310b3;
+  return str(year()) + ('0' + str(month()))[_0x5f5192(0x1c5)](-0x2) + ('0' + str(day()))['slice'](-0x2) + '_' + ('0' + str(hour()))[_0x5f5192(0x1c5)](-0x2) + ('0' + str(minute()))[_0x5f5192(0x1c5)](-0x2) + ('0' + str(second()))[_0x5f5192(0x1c5)](-0x2) + '-' + parameters[_0x5f5192(0x17b)] + _0xc71483;
+} function tick() {
+  temperature *= 0x1 - coolingRate;
+} function reheat() {
+  temperature = 0x1;
+} function setupEasyCam(_0x344c4d, _0x2305a1) {
+  const _0x4449d3 = a0_0x5310b3;
+  let _0x4c8c13 = createEasyCam(_0x344c4d['_renderer'], { 'distance': _0x2305a1 });
+  _0x4c8c13['setDistanceMin'](0xa), _0x4c8c13[_0x4449d3(0x20c)](0xbb8), _0x4c8c13[_0x4449d3(0x28d)](_0x344c4d[_0x4449d3(0x19a)]), _0x4c8c13[_0x4449d3(0xf6)](0x12c), _0x4c8c13['setViewport']([_0x344c4d[_0x4449d3(0x245)]['offsetLeft'], _0x344c4d[_0x4449d3(0x245)]['offsetTop'], _0x344c4d[_0x4449d3(0x245)][_0x4449d3(0x129)], _0x344c4d[_0x4449d3(0x245)][_0x4449d3(0x279)]]), _0x344c4d[_0x4449d3(0xff)] = _0x4c8c13;
+} function initGraph(_0x137885) {
+  const _0x1cd4a3 = a0_0x5310b3;
+  if (reheat(), verbose && print(_0x1cd4a3(0x174) + _0x137885), 'random' === _0x137885) graph = randomGraph();
+  else {
+    if (_0x1cd4a3(0x244) === _0x137885 && void 0x0 !== customGraph) graph = new Graph(customGraph[_0x1cd4a3(0x1d1)], customGraph[_0x1cd4a3(0x222)]);
+    else {
+      if ('K' === _0x137885[_0x1cd4a3(0xdc)](0x0)) {
+        _0x137885 = _0x137885[_0x1cd4a3(0x1c5)](0x2, -0x1);
+        let _0x7e4e7c = split(_0x137885, ',');
+        0x2 == _0x7e4e7c[_0x1cd4a3(0x147)] ? graph = completeBipartiteGraph(int(_0x7e4e7c[0x0]), int(_0x7e4e7c[0x1])) : 0x1 == _0x7e4e7c[_0x1cd4a3(0x147)] && (graph = completeGraph(int(_0x7e4e7c[0x0])));
+      } else {
+        if ('C' === _0x137885[_0x1cd4a3(0xdc)](0x0)) {
+          _0x137885 = _0x137885[_0x1cd4a3(0x1c5)](0x2, -0x1);
+          let _0x20f13c = split(_0x137885, ',');
+          0x1 == _0x20f13c['length'] && (graph = chainGraph(int(_0x20f13c[0x0])));
+        } else {
+          if ('W' === _0x137885[_0x1cd4a3(0xdc)](0x0)) {
+            _0x137885 = _0x137885[_0x1cd4a3(0x1c5)](0x2, -0x1);
+            let _0x5b586e = split(_0x137885, ',');
+            0x1 == _0x5b586e[_0x1cd4a3(0x147)] && (graph = wheelGraph(int(_0x5b586e[0x0])));
+          }
+        }
+      }
+    }
+  } graph[_0x1cd4a3(0x207)](graphicsForGraph, !0x0), configuration_space = new Configuration_space(graph, 0x2), verbose && print(configuration_space), updateURL();
+} class Graph {
+  constructor(_0x2f9351, _0x6bf182) {
+    const _0x285b65 = a0_0x5310b3;
+    this['type'] = _0x285b65(0x15f), this['nodes'] = _0x2f9351, this[_0x285b65(0x222)] = _0x6bf182;
+  } [a0_0x5310b3(0x17a)]() {
+    const _0x517d38 = a0_0x5310b3;
+    this[_0x517d38(0x105)][_0x517d38(0x17a)]();
+  } ['show']() {
+    const _0x567717 = a0_0x5310b3;
+    this[_0x567717(0x105)][_0x567717(0x1bc)]();
+  } [a0_0x5310b3(0x288)]() {
+    const _0x47e9fb = a0_0x5310b3;
+    return [this[_0x47e9fb(0x22b)], this[_0x47e9fb(0x213)]];
+  } ['otherRobot'](_0x482d77) {
+    const _0x25122c = a0_0x5310b3;
+    return this[_0x25122c(0x22b)] === _0x482d77 ? this['robotB'] : this[_0x25122c(0x22b)];
+  } [a0_0x5310b3(0x18d)]() {
+    const _0x143d19 = a0_0x5310b3;
+    let _0xeaea45 = parameters[_0x143d19(0x292)] * parameters[_0x143d19(0x135)], _0x1d700e = parameters[_0x143d19(0x292)] * parameters['robotBSpeed'], _0x1818e2 = this[_0x143d19(0x22b)][_0x143d19(0x1ce)] + _0xeaea45, _0x40188e = this[_0x143d19(0x213)][_0x143d19(0x1ce)] + _0x1d700e;
+    if (_0x1818e2 >= 0x1 && _0x40188e < 0x1) _0x1818e2 = 0x1, _0x40188e = this[_0x143d19(0x213)][_0x143d19(0x1ce)] + _0x1d700e * (0x1 - this[_0x143d19(0x22b)][_0x143d19(0x1ce)]) / _0xeaea45;
+    else {
+      if (_0x1818e2 < 0x1 && _0x40188e >= 0x1) _0x40188e = 0x1, _0x1818e2 = this[_0x143d19(0x22b)]['amount'] + _0xeaea45 * (0x1 - this[_0x143d19(0x213)][_0x143d19(0x1ce)]) / _0x1d700e;
+      else {
+        if (_0x1818e2 >= 0x1 && _0x40188e >= 0x1) {
+          let _0x4ccf8a = (0x1 - this[_0x143d19(0x22b)][_0x143d19(0x1ce)]) / (_0x1818e2 - this[_0x143d19(0x22b)][_0x143d19(0x1ce)]), _0x1ed9a5 = (0x1 - this[_0x143d19(0x213)][_0x143d19(0x1ce)]) / (_0x40188e - this[_0x143d19(0x213)]['amount']);
+          _0x4ccf8a > _0x1ed9a5 ? (_0x40188e = 0x1, _0x1818e2 = this[_0x143d19(0x22b)][_0x143d19(0x1ce)] + _0xeaea45 * _0x1ed9a5) : (_0x1818e2 = 0x1, _0x40188e = this['robotB']['amount'] + _0x1d700e * _0x4ccf8a);
+        }
+      }
+    } robotAmoving && this['robotA']['setAmount'](_0x1818e2), robotBmoving && this[_0x143d19(0x213)][_0x143d19(0x200)](_0x40188e), parameters[_0x143d19(0x1d8)] && configuration_space['graphLayout'][_0x143d19(0x23a)][_0x143d19(0x27d)](this[_0x143d19(0x22b)][_0x143d19(0xd3)], this[_0x143d19(0x22b)]['nodeTo'], this[_0x143d19(0x22b)][_0x143d19(0x1ce)], this[_0x143d19(0x213)][_0x143d19(0xd3)], this[_0x143d19(0x213)][_0x143d19(0x1ee)], this[_0x143d19(0x213)][_0x143d19(0x1ce)]);
+  } ['createGraphLayout'](_0x14db05, _0x14d4a3) {
+    const _0x6352f5 = a0_0x5310b3;
+    this[_0x6352f5(0x105)] = new GraphLayout(this, _0x14db05, _0x14d4a3);
+    for (let _0x1dd494 of this[_0x6352f5(0x1d1)]) this[_0x6352f5(0x105)][_0x6352f5(0x165)](_0x1dd494);
+    for (let _0x88fda7 of this[_0x6352f5(0x222)]) {
+      let _0x2d8feb = this[_0x6352f5(0x105)][_0x6352f5(0x14c)](_0x88fda7[0x0]), _0x4fdc51 = this[_0x6352f5(0x105)][_0x6352f5(0x14c)](_0x88fda7[0x1]);
+      this[_0x6352f5(0x105)][_0x6352f5(0x153)](_0x88fda7, _0x2d8feb, _0x4fdc51);
+    } this['robotA'] = new Robot(this, this[_0x6352f5(0x105)][_0x6352f5(0x1d1)][0x0], 0x0), this[_0x6352f5(0x213)] = new Robot(this, this[_0x6352f5(0x105)]['nodes'][0x1], 0x1), this[_0x6352f5(0x105)][_0x6352f5(0x1d9)]();
+  }
+} class Configuration_space {
+  constructor(_0x3cdad7, _0x27db3d) {
+    const _0x13e35b = a0_0x5310b3;
+    this['type'] = _0x13e35b(0x171), this[_0x13e35b(0x21b)] = _0x27db3d;
+    let _0x2efe6f = _0x3cdad7[_0x13e35b(0x1d1)][_0x13e35b(0x1a6)](_0x3cdad7[_0x13e35b(0x222)]), _0x358d4b = cartesianProductOf(_0x2efe6f, _0x2efe6f);
+    this[_0x13e35b(0x138)] = _0x358d4b['filter'](is_state), verbose && console['log'](this[_0x13e35b(0x138)]), verbose && print(_0x13e35b(0x1c1)), verbose && print(this[_0x13e35b(0x138)]), this['createGraphLayout'](graphicsForConfigurationSpace, !0x0);
+  } [a0_0x5310b3(0x17a)]() {
+    const _0x2ea162 = a0_0x5310b3;
+    this[_0x2ea162(0x105)][_0x2ea162(0x17a)]();
+  } ['show']() {
+    const _0x4fd066 = a0_0x5310b3;
+    this[_0x4fd066(0x105)][_0x4fd066(0x1bc)]();
+  } ['getRobots']() {
+    return [];
+  } [a0_0x5310b3(0x285)](_0x1022d2) {
+    const _0x4000ed = a0_0x5310b3;
+    return flatten(_0x1022d2)[_0x4000ed(0x147)] - this[_0x4000ed(0x21b)];
+  } [a0_0x5310b3(0x280)](_0x596875) {
+    const _0x26b437 = a0_0x5310b3;
+    let _0x438c56 = graph[_0x26b437(0x1d1)][_0x26b437(0x1a6)](graph['edges']), _0xa7d0c9 = cartesianProductOf([_0x596875], _0x438c56)['concat'](cartesianProductOf(_0x438c56, [_0x596875]));
+    verbose && console[_0x26b437(0x1e3)]('newPossibleStates'), verbose && console[_0x26b437(0x1e3)](_0xa7d0c9);
+    let _0xcdf8d8 = _0xa7d0c9[_0x26b437(0x218)](is_state);
+    for (let _0x2ec10c of _0xcdf8d8) this[_0x26b437(0x1e9)](_0x2ec10c), this[_0x26b437(0x138)][_0x26b437(0x12b)](_0x2ec10c);
+  } [a0_0x5310b3(0xc2)](_0x3d3377) {
+    const _0x42bce0 = a0_0x5310b3;
+    let _0x186250 = [], _0x24dc7b = [];
+    for (let _0x2661e4 of this['states']) flatten(_0x2661e4)[_0x42bce0(0xfb)](_0x3d3377) ? _0x24dc7b[_0x42bce0(0x12b)](_0x2661e4) : _0x186250['push'](_0x2661e4);
+    for (let _0x91075c of _0x24dc7b) {
+      switch (this[_0x42bce0(0x285)](_0x91075c)) {
+        case 0x0: this[_0x42bce0(0x105)]['deleteNode'](_0x91075c);
+          break;
+        case 0x1: this[_0x42bce0(0x105)][_0x42bce0(0x1e7)](_0x91075c);
+          break;
+        case 0x2: this[_0x42bce0(0x105)][_0x42bce0(0xd9)](_0x91075c);
+      }this[_0x42bce0(0x138)] = _0x186250;
+    }
+  } [a0_0x5310b3(0x1e9)](_0x3d83e7) {
+    const _0x117ac2 = a0_0x5310b3;
+    switch (this[_0x117ac2(0x285)](_0x3d83e7)) {
+      case 0x0: verbose && print('state_1:'), verbose && print(_0x3d83e7), this[_0x117ac2(0x105)]['addNode'](_0x3d83e7);
+        break;
+      case 0x1: if (verbose && print(_0x117ac2(0x130)), verbose && print(_0x3d83e7), Array['isArray'](_0x3d83e7[0x0])) {
+        let _0x2acda4 = this['graphLayout'][_0x117ac2(0x14c)]([_0x3d83e7[0x0][0x0], _0x3d83e7[0x1]]), _0x59c2e5 = this[_0x117ac2(0x105)][_0x117ac2(0x14c)]([_0x3d83e7[0x0][0x1], _0x3d83e7[0x1]]);
+        this[_0x117ac2(0x105)]['addEdge'](_0x3d83e7, _0x2acda4, _0x59c2e5);
+      } else {
+        if (Array[_0x117ac2(0xed)](_0x3d83e7[0x1])) {
+          let _0x11b3c8 = this[_0x117ac2(0x105)][_0x117ac2(0x14c)]([_0x3d83e7[0x0], _0x3d83e7[0x1][0x0]]), _0x469145 = this[_0x117ac2(0x105)][_0x117ac2(0x14c)]([_0x3d83e7[0x0], _0x3d83e7[0x1][0x1]]);
+          verbose && print(_0x117ac2(0x181)), verbose && print(_0x11b3c8), this[_0x117ac2(0x105)][_0x117ac2(0x153)](_0x3d83e7, _0x11b3c8, _0x469145);
+        } else verbose && print(_0x117ac2(0x253));
+      } break;
+      case 0x2: verbose && print('state_2:'), verbose && print(_0x3d83e7);
+        let _0x259957 = this[_0x117ac2(0x105)]['getEdge'](_0x3d83e7[0x0][0x0], _0x3d83e7[0x1], !0x0), _0x526230 = this[_0x117ac2(0x105)]['getEdge'](_0x3d83e7[0x0][0x1], _0x3d83e7[0x1], !0x0), _0x425eaf = this[_0x117ac2(0x105)][_0x117ac2(0x128)](_0x3d83e7[0x0], _0x3d83e7[0x1][0x0], !0x0), _0x37dce7 = this[_0x117ac2(0x105)][_0x117ac2(0x128)](_0x3d83e7[0x0], _0x3d83e7[0x1][0x1], !0x0);
+        verbose && print(_0x259957), verbose && print(_0x526230), this[_0x117ac2(0x105)][_0x117ac2(0x19c)](_0x3d83e7, _0x259957, _0x526230, _0x425eaf, _0x37dce7);
+    }
+  } [a0_0x5310b3(0x207)](_0x484ce8, _0x1102ae) {
+    const _0x225ff1 = a0_0x5310b3;
+    this[_0x225ff1(0x105)] = new GraphLayout(this, _0x484ce8, _0x1102ae), this[_0x225ff1(0x105)][_0x225ff1(0xba)] = !0x0;
+    for (let _0x5abec0 of this[_0x225ff1(0x138)]) this[_0x225ff1(0x1e9)](_0x5abec0);
+    this[_0x225ff1(0x105)]['configuration'] = new Configuration(this[_0x225ff1(0x105)], graph['robotA'], graph[_0x225ff1(0x213)]), this[_0x225ff1(0x105)][_0x225ff1(0x1d9)]();
+  }
+} class GraphLayout {
+  constructor(_0x3d459b, _0x3d87c6, _0x272f77) {
+    const _0x1d0bdb = a0_0x5310b3;
+    this['source'] = _0x3d459b, this['graphics'] = _0x3d87c6, this[_0x1d0bdb(0x17d)] = _0x272f77, this[_0x1d0bdb(0x11d)] = !0x1, this[_0x1d0bdb(0x23d)] = !0x0, this[_0x1d0bdb(0x1d1)] = [], this['nodeBorder'] = !0x0, this[_0x1d0bdb(0x23b)] = 0.05, this['showNodes'] = !0x0, this[_0x1d0bdb(0x222)] = [], this[_0x1d0bdb(0xdd)] = !0x0, this[_0x1d0bdb(0xdb)] = [], this[_0x1d0bdb(0x104)] = !0x0, this[_0x1d0bdb(0xb1)] = 0x0, this['centerForce'] = 0x0, this[_0x1d0bdb(0x243)] = 0x0, this[_0x1d0bdb(0x152)] = !0x0, this[_0x1d0bdb(0x134)] = 0x64, this['firstCoordinateEdgeLength'] = 0x64, this[_0x1d0bdb(0x256)] = 0x64, this[_0x1d0bdb(0x13f)] = 0.01, this[_0x1d0bdb(0x1f4)] = 0.05, this['secondCoordinateForce'] = 0.01, this[_0x1d0bdb(0x17c)] = 0x0, this[_0x1d0bdb(0xb5)] = 0x0, this[_0x1d0bdb(0x18b)] = 0x0, this[_0x1d0bdb(0x1cc)] = 0.01, this[_0x1d0bdb(0x255)] = createVector(0x0, 0x0, 0x0), this[_0x1d0bdb(0xe3)] = 0x1, this['coolDown'] = 0.01, this[_0x1d0bdb(0x1ed)] = 0xa, this[_0x1d0bdb(0xea)] = 0x1, this['repulsion'] = 0xc350, this[_0x1d0bdb(0x16d)] = 0x1e, this[_0x1d0bdb(0x149)] = !0x0;
+  } [a0_0x5310b3(0x1d9)]() {
+    const _0x392058 = a0_0x5310b3;
+    for (let _0xa0b9ba = 0x0;
+      _0xa0b9ba < 0x64;
+      _0xa0b9ba++)for (let _0x1a15f4 of this[_0x392058(0x1d1)]) this[_0x392058(0x10c)](), _0x1a15f4[_0x392058(0x17a)](this[_0x392058(0x1d1)]), _0x1a15f4[_0x392058(0xeb)]();
+  } [a0_0x5310b3(0x10c)]() {
+    const _0x42b35b = a0_0x5310b3;
+    this['octree'] = new Octree(new Cube(0x0, 0x0, 0x0, 0x1e * max(width, height), 0x1e * max(width, height), 0x1e * max(width, height)), 0x0);
+    for (let _0xa56be1 of this['nodes']) this[_0x42b35b(0x27e)]['insert'](_0xa56be1);
+    this[_0x42b35b(0x27e)][_0x42b35b(0x18e)](), verbose && println(_0x42b35b(0x26e) + noNodes + _0x42b35b(0x10e) + octree['nodeCount']());
+  } [a0_0x5310b3(0x1bc)]() {
+    const _0x4991a1 = a0_0x5310b3;
+    this['graphics'][_0x4991a1(0x1de)]();
+    let _0x257231 = graphicsForConfigurationSpace['canvas'][_0x4991a1(0x28f)](_0x4991a1(0x1f8));
+    if (_0x257231['disable'](_0x257231[_0x4991a1(0x102)]), parameters[_0x4991a1(0xc8)] && _0x4991a1(0x171) === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] && this[_0x4991a1(0x27e)][_0x4991a1(0x1bc)](this[_0x4991a1(0x141)]), _0x4991a1(0x171) === this[_0x4991a1(0x132)]['type'] && parameters[_0x4991a1(0xf0)] && this[_0x4991a1(0x104)]) {
+      for (let _0x4711b3 of this[_0x4991a1(0xdb)]) _0x4711b3[_0x4991a1(0x1bc)]();
+    } if (_0x257231[_0x4991a1(0x260)](_0x257231[_0x4991a1(0x102)]), _0x4991a1(0x171) === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] && parameters[_0x4991a1(0xf8)]) {
+      for (let _0x597cdf of graph[_0x4991a1(0x105)][_0x4991a1(0x1d1)]) _0x597cdf[_0x4991a1(0x1bc)](this[_0x4991a1(0x141)]);
+      for (let _0x1246f1 of graph[_0x4991a1(0x105)][_0x4991a1(0x222)]) _0x1246f1[_0x4991a1(0x1bc)](this[_0x4991a1(0x141)]);
+      if (parameters[_0x4991a1(0x202)]) {
+        for (let _0x358d6b of graph[_0x4991a1(0x288)]()) _0x358d6b[_0x4991a1(0x1bc)](this[_0x4991a1(0x141)]);
+      }
+    } if (_0x4991a1(0x15f) === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] || parameters[_0x4991a1(0xf0)]) {
+      if (this[_0x4991a1(0xdd)]) {
+        for (let _0x191cb8 of this[_0x4991a1(0x222)]) _0x191cb8[_0x4991a1(0x1bc)](this[_0x4991a1(0x141)]);
+      } if (this[_0x4991a1(0x18a)]) {
+        for (let _0x1085cc of this['nodes']) _0x1085cc['show'](this[_0x4991a1(0x141)]);
+      }
+    } if (_0x4991a1(0x171) === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] && parameters['showLoops'] && void 0x0 !== configuration_space['loops']) {
+      let _0x2c9b3f = configuration_space[_0x4991a1(0x142)]['length'];
+      for (let _0x2f3499 = 0x0;
+        _0x2f3499 < _0x2c9b3f;
+        _0x2f3499++)for (let _0x43afda of configuration_space[_0x4991a1(0x142)][_0x2f3499]) {
+          let _0x54c744 = this['getEdge'](_0x43afda[0x0], _0x43afda[0x1], !0x0);
+          colorMode(HSB);
+          let _0x1bc9d0 = color(map(_0x2f3499, 0x0, _0x2c9b3f, 0x0, 0xff), 0xff, 0xff);
+          _0x54c744[_0x4991a1(0x1bc)](this['graphics'], 2.5, _0x1bc9d0);
+        }
+    } if (_0x4991a1(0x15f) === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] && parameters['showRobots']) {
+      for (let _0x4c6424 of this[_0x4991a1(0x132)]['getRobots']()) _0x4c6424[_0x4991a1(0x1bc)](this[_0x4991a1(0x141)]);
+    } if ('configuration_space' === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] && parameters[_0x4991a1(0xf0)] && parameters['showRobots'] && this[_0x4991a1(0xba)] && this[_0x4991a1(0x23a)]['show'](), ('graph' === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] || parameters[_0x4991a1(0xf0)]) && this['showNodes'] && parameters['showText']) {
+      for (let _0xfd1f4 of this[_0x4991a1(0x1d1)]) _0xfd1f4['showText'](this['graphics']);
+      if ('configuration_space' === this[_0x4991a1(0x132)][_0x4991a1(0x1e1)] && parameters['showGraph']) {
+        for (let _0x336f23 of graph[_0x4991a1(0x105)][_0x4991a1(0x1d1)]) _0x336f23[_0x4991a1(0x225)](this[_0x4991a1(0x141)]);
+      }
+    } this[_0x4991a1(0x250)]++;
+  } [a0_0x5310b3(0x17a)]() {
+    const _0x5a6fe1 = a0_0x5310b3;
+    if (running) {
+      if (this[_0x5a6fe1(0x10c)](), this[_0x5a6fe1(0x152)]) {
+        let _0x52eeb8 = 0x0, _0x285fef = 0x0, _0x4a05a5 = 0x0;
+        for (let _0x4da5e8 of this['nodes']) _0x52eeb8 += (-_0x4da5e8['position']['x'] + this[_0x5a6fe1(0x255)]['x']) / this[_0x5a6fe1(0x1d1)][_0x5a6fe1(0x147)], _0x285fef += (-_0x4da5e8[_0x5a6fe1(0x273)]['y'] + this[_0x5a6fe1(0x255)]['y']) / this[_0x5a6fe1(0x1d1)][_0x5a6fe1(0x147)], _0x4a05a5 += (-_0x4da5e8['position']['z'] + this['center']['z']) / this[_0x5a6fe1(0x1d1)][_0x5a6fe1(0x147)];
+        for (let _0x1c8507 of this[_0x5a6fe1(0x1d1)]) _0x1c8507[_0x5a6fe1(0x268)] || _0x1c8507[_0x5a6fe1(0x273)][_0x5a6fe1(0xc5)](0.1 * _0x52eeb8, 0.1 * _0x285fef, 0.1 * _0x4a05a5);
+      } if (this['layoutGraph']) {
+        for (let _0x2f9e43 of this['nodes']) forcesActive && (_0x2f9e43[_0x5a6fe1(0x17a)](this['nodes']), _0x2f9e43[_0x5a6fe1(0xeb)]());
+      }
+    }
+  } [a0_0x5310b3(0x14c)](_0x114b76) {
+    const _0x541f23 = a0_0x5310b3;
+    for (let _0x43da6c of this[_0x541f23(0x1d1)]) if (arraysEqual(_0x43da6c[_0x541f23(0xe4)], _0x114b76)) return _0x43da6c;
+    return verbose && print(_0x541f23(0xee)), !0x1;
+  } [a0_0x5310b3(0x128)](_0x1e227c, _0x54fb28, _0x34e885) {
+    const _0x387589 = a0_0x5310b3;
+    verbose && print(_0x387589(0xdf)), verbose && print(_0x1e227c), verbose && print(_0x54fb28);
+    for (let _0x2f17ff of this['edges']) if (arraysEqual([_0x1e227c, _0x54fb28], _0x2f17ff['label']) || !_0x34e885 && arraysEqual([_0x54fb28, _0x1e227c], _0x2f17ff[_0x387589(0xe4)])) return verbose && print(_0x387589(0x1eb)), verbose && print(_0x2f17ff), _0x2f17ff;
+  } ['getSquare'](_0x2099c9, _0x278712) {
+    const _0x3dd562 = a0_0x5310b3;
+    verbose && print('getSquare:\x20'), verbose && print(_0x2099c9), verbose && print(_0x278712);
+    for (let _0x39ba9f of this[_0x3dd562(0xdb)]) if (verbose && print(_0x39ba9f['label']), arraysEqual([_0x2099c9, _0x278712], _0x39ba9f[_0x3dd562(0xe4)])) return verbose && print(_0x3dd562(0x1eb)), verbose && print(_0x39ba9f), _0x39ba9f;
+  } [a0_0x5310b3(0x165)](_0x551e3b, _0x3e7311, _0xd6750c, _0x1e32d2) {
+    const _0x19ae4e = a0_0x5310b3;
+    verbose && print(_0x19ae4e(0xac) + _0x551e3b);
+    let _0x16ff50 = 0x64, _0x36def7 = new Node(this, _0x551e3b, void 0x0 === _0x3e7311 ? random(-_0x16ff50, _0x16ff50) : _0x3e7311, void 0x0 === _0xd6750c ? random(-_0x16ff50, _0x16ff50) : _0xd6750c, void 0x0 === _0x1e32d2 ? random(-_0x16ff50, _0x16ff50) : _0x1e32d2);
+    return this['nodes']['push'](_0x36def7), _0x36def7;
+  } [a0_0x5310b3(0x191)](_0x507215) {
+    const _0x5ac478 = a0_0x5310b3;
+    let _0x84a3d1 = this[_0x5ac478(0x14c)](_0x507215);
+    this[_0x5ac478(0x1d1)]['splice'](this[_0x5ac478(0x1d1)][_0x5ac478(0x188)](_0x84a3d1), 0x1);
+  } [a0_0x5310b3(0x153)](_0x43fad6, _0x23d409, _0x23e0e2) {
+    const _0x2b84d5 = a0_0x5310b3;
+    verbose && print(_0x2b84d5(0x144) + _0x43fad6), verbose && print(_0x2b84d5(0x271)), verbose && print(_0x23d409[_0x2b84d5(0xe4)] + '\x20to\x20' + _0x23e0e2[_0x2b84d5(0xe4)]);
+    let _0x83fd8b = new Edge(this, _0x43fad6, _0x23d409, _0x23e0e2);
+    return this[_0x2b84d5(0x222)][_0x2b84d5(0x12b)](_0x83fd8b), _0x23e0e2[_0x2b84d5(0x1a5)](_0x23d409), _0x23d409[_0x2b84d5(0x1a5)](_0x23e0e2), _0x83fd8b;
+  } ['deleteEdge'](_0x141543) {
+    const _0x3e6966 = a0_0x5310b3;
+    let _0x4bf314 = this[_0x3e6966(0x128)](_0x141543[0x0], _0x141543[0x1], !0x1);
+    this[_0x3e6966(0x222)][_0x3e6966(0x27f)](this[_0x3e6966(0x222)][_0x3e6966(0x188)](_0x4bf314), 0x1);
+  } [a0_0x5310b3(0x19c)](_0x1e9fbf, _0x2eaeaf, _0x15fc48, _0xb61f84, _0x11543a) {
+    const _0x98a5ba = a0_0x5310b3;
+    let _0x4fef4d = new Square(this, _0x1e9fbf, _0x2eaeaf, _0x15fc48, _0xb61f84, _0x11543a);
+    this[_0x98a5ba(0xdb)]['push'](_0x4fef4d);
+  } [a0_0x5310b3(0xd9)](_0x5c1acd) {
+    const _0xc42685 = a0_0x5310b3;
+    let _0x2a7a26 = this[_0xc42685(0x13e)](_0x5c1acd[0x0], _0x5c1acd[0x1]);
+    this[_0xc42685(0xdb)][_0xc42685(0x27f)](this['squares']['indexOf'](_0x2a7a26), 0x1);
+  }
+} class Node {
+  constructor(_0x258886, _0x222e04, _0x2587b1, _0x217239, _0x24fb00) {
+    const _0x5b1875 = a0_0x5310b3;
+    this[_0x5b1875(0x105)] = _0x258886, this[_0x5b1875(0x141)] = _0x258886['graphics'], this[_0x5b1875(0x154)] = labelToString(_0x222e04), this[_0x5b1875(0x293)] = !0x1, this[_0x5b1875(0xe4)] = _0x222e04, verbose && print(_0x222e04), this['active'] = !0x1, _0x258886[_0x5b1875(0x17d)] ? (this[_0x5b1875(0x273)] = createVector(_0x2587b1, _0x217239, _0x24fb00), this[_0x5b1875(0x22c)] = createVector(0x0, 0x0, 0x0), this[_0x5b1875(0x1b3)] = createVector(0x0, 0x0, 0x0)) : (this['position'] = createVector(_0x2587b1, _0x217239), this[_0x5b1875(0x22c)] = createVector(0x0, 0x0), this['acceleration'] = createVector(0x0, 0x0)), this[_0x5b1875(0x268)] = !0x1, this[_0x5b1875(0x1c0)] = !0x0, this[_0x5b1875(0x179)] = [], this['squareneighbors'] = [];
+  } [a0_0x5310b3(0x1a5)](_0x44cc4f) {
+    const _0x54535c = a0_0x5310b3;
+    this[_0x54535c(0x179)]['push'](_0x44cc4f);
+  } [a0_0x5310b3(0x161)](_0x4fed97) {
+    const _0x1317ef = a0_0x5310b3;
+    this[_0x1317ef(0x26f)][_0x1317ef(0x12b)](_0x4fed97);
+  } ['update'](_0x371f1e) {
+    const _0x3cb159 = a0_0x5310b3;
+    this[_0x3cb159(0x1b3)]['mult'](0x0);
+    let _0x29bf3c = this[_0x3cb159(0xe8)](_0x371f1e);
+    if (_0x3cb159(0x15f) === this[_0x3cb159(0x105)][_0x3cb159(0x132)]['type']) {
+      let _0x13271f = this[_0x3cb159(0x167)](this[_0x3cb159(0x105)][_0x3cb159(0x134)], this[_0x3cb159(0x105)][_0x3cb159(0x13f)], this['neighbors']);
+      if (_0x13271f['mult'](0x1 * this['graphLayout'][_0x3cb159(0xea)]), this['acceleration'][_0x3cb159(0xc5)](_0x13271f), this[_0x3cb159(0x1b3)][_0x3cb159(0xc5)](_0x29bf3c), this[_0x3cb159(0x105)][_0x3cb159(0xb1)] > 0x0) {
+        let _0x1a9a35 = createVector(this['position']['x'], this[_0x3cb159(0x273)]['y'], 0x0), _0x51f89c = this[_0x3cb159(0x21e)](this[_0x3cb159(0x105)][_0x3cb159(0xb1)], _0x1a9a35);
+        this[_0x3cb159(0x1b3)][_0x3cb159(0xc5)](_0x51f89c);
+      }
+    } else {
+      let _0x42fb78 = this[_0x3cb159(0x167)](this[_0x3cb159(0x105)][_0x3cb159(0x256)], this[_0x3cb159(0x105)][_0x3cb159(0x1f0)], this[_0x3cb159(0x179)][_0x3cb159(0x218)](_0x39d165 => _0x39d165[_0x3cb159(0xe4)][0x0] === this['label'][0x0])), _0x4e26bb = this[_0x3cb159(0x167)](this[_0x3cb159(0x105)][_0x3cb159(0x14b)], this[_0x3cb159(0x105)][_0x3cb159(0x1f4)], this['neighbors'][_0x3cb159(0x218)](_0x313ab5 => _0x313ab5[_0x3cb159(0xe4)][0x1] === this['label'][0x1])), _0x4c67c8 = this[_0x3cb159(0x21e)](this[_0x3cb159(0x105)][_0x3cb159(0x17c)], graph[_0x3cb159(0x105)][_0x3cb159(0x14c)](this['label'][0x0])[_0x3cb159(0x273)]), _0x1da286 = this[_0x3cb159(0x21e)](this['graphLayout'][_0x3cb159(0xb5)], graph[_0x3cb159(0x105)][_0x3cb159(0x14c)](this['label'][0x1])[_0x3cb159(0x273)]);
+      graph['graphLayout'][_0x3cb159(0x1d1)]['forEach'](_0x562ebd => {
+        const _0x3ab7b3 = _0x3cb159;
+        _0x562ebd[_0x3ab7b3(0x293)] && (this[_0x3ab7b3(0xe4)][0x0] === _0x562ebd[_0x3ab7b3(0xe4)] && (_0x4c67c8 = _0x4c67c8[_0x3ab7b3(0xc5)](this[_0x3ab7b3(0x21e)](this[_0x3ab7b3(0x105)][_0x3ab7b3(0x18b)], _0x562ebd[_0x3ab7b3(0x273)]))), this['label'][0x1] === _0x562ebd[_0x3ab7b3(0xe4)] && (_0x1da286 = _0x1da286[_0x3ab7b3(0xc5)](this['getForceTowardsGoal'](-this[_0x3ab7b3(0x105)][_0x3ab7b3(0x18b)], _0x562ebd['position']))));
+      }), _0x42fb78[_0x3cb159(0x1aa)](0x1 * this['graphLayout'][_0x3cb159(0xea)]), _0x4e26bb[_0x3cb159(0x1aa)](0x1 * this[_0x3cb159(0x105)][_0x3cb159(0xea)]), _0x4c67c8[_0x3cb159(0x1aa)](0x1 * this[_0x3cb159(0x105)][_0x3cb159(0xea)]), _0x1da286['mult'](0x1 * this[_0x3cb159(0x105)][_0x3cb159(0xea)]), this[_0x3cb159(0x1b3)][_0x3cb159(0xc5)](_0x29bf3c), this[_0x3cb159(0x1b3)]['add'](_0x42fb78), this[_0x3cb159(0x1b3)]['add'](_0x4e26bb), this[_0x3cb159(0x1b3)][_0x3cb159(0xc5)](_0x4c67c8), this[_0x3cb159(0x1b3)][_0x3cb159(0xc5)](_0x1da286);
+    } let _0x79c3e0 = this[_0x3cb159(0x21e)](this[_0x3cb159(0x105)]['centerForce'], this[_0x3cb159(0x105)][_0x3cb159(0x255)]);
+    if (this[_0x3cb159(0x1b3)][_0x3cb159(0xc5)](_0x79c3e0), this[_0x3cb159(0x293)]) {
+      let _0x5b915e = this['getForceTowardsGoal'](this[_0x3cb159(0x105)][_0x3cb159(0x243)], this[_0x3cb159(0x105)][_0x3cb159(0x255)]);
+      this[_0x3cb159(0x1b3)][_0x3cb159(0xc5)](_0x5b915e);
+    }
+  } [a0_0x5310b3(0xeb)]() {
+    const _0x5b4bb4 = a0_0x5310b3;
+    this[_0x5b4bb4(0x268)] || (limitVector(this['velocity'], parameters['maxspeed']), this[_0x5b4bb4(0x22c)][_0x5b4bb4(0xc5)](this[_0x5b4bb4(0x1b3)]), this[_0x5b4bb4(0x273)][_0x5b4bb4(0xc5)](this['velocity']), this[_0x5b4bb4(0x22c)]['mult'](0.9));
+  } ['getCenter'](_0x471883) {
+    const _0x447041 = a0_0x5310b3;
+    let _0x4db3eb = new createVector(0x0, 0x0, 0x0);
+    const _0x1d9201 = _0x471883[_0x447041(0x147)];
+    for (let _0x503f2c of _0x471883) {
+      const _0x1b51fc = p5[_0x447041(0x1f6)][_0x447041(0x24d)](_0x503f2c[_0x447041(0x273)], _0x1d9201);
+      _0x4db3eb[_0x447041(0xc5)](_0x1b51fc);
+    } return _0x4db3eb;
+  } [a0_0x5310b3(0xe8)](_0x11dace) {
+    const _0xc9ed4 = a0_0x5310b3;
+    let _0x4ab38b = new createVector(0x0, 0x0, 0x0);
+    for (let _0xc8357b of _0x11dace) {
+      let _0x17c247 = p5[_0xc9ed4(0x1f6)][_0xc9ed4(0xe5)](this[_0xc9ed4(0x273)], _0xc8357b[_0xc9ed4(0x273)]), _0x2e1353 = _0x17c247['mag']();
+      _0x2e1353 > 0x1 && (_0x17c247[_0xc9ed4(0xbe)]()['mult'](this['graphLayout'][_0xc9ed4(0x11f)] / (_0x2e1353 * _0x2e1353)), _0x4ab38b['add'](_0x17c247));
+    } return _0x4ab38b;
+  } [a0_0x5310b3(0x167)](_0x1bc4e9, _0x5f3e94, _0x42a3d1) {
+    const _0x5d86e1 = a0_0x5310b3;
+    let _0x473e19 = new createVector(0x0, 0x0, 0x0);
+    for (let _0x1bfee6 of _0x42a3d1) {
+      let _0x1693bc = p5[_0x5d86e1(0x1f6)][_0x5d86e1(0xe5)](this['position'], _0x1bfee6[_0x5d86e1(0x273)]), _0x1fd80e = _0x1693bc[_0x5d86e1(0x1fa)]() - _0x1bc4e9;
+      abs(_0x1fd80e) > this['graphLayout'][_0x5d86e1(0x1ed)] && (_0x1693bc[_0x5d86e1(0xbe)]()[_0x5d86e1(0x1aa)](-_0x5f3e94 * _0x1fd80e), _0x473e19[_0x5d86e1(0xc5)](_0x1693bc));
+    } return limitVector(_0x473e19, _0x1bc4e9), _0x473e19;
+  } [a0_0x5310b3(0x21e)](_0x42f9e9, _0x2ff705) {
+    const _0x30d1a5 = a0_0x5310b3;
+    let _0x3dc67f = p5[_0x30d1a5(0x1f6)][_0x30d1a5(0xe5)](_0x2ff705, this['position']), _0x29a71b = _0x3dc67f[_0x30d1a5(0x1fa)]();
+    return abs(_0x29a71b) > this[_0x30d1a5(0x105)][_0x30d1a5(0x1ed)] && _0x3dc67f[_0x30d1a5(0xbe)]()['mult'](_0x42f9e9 * _0x29a71b), _0x3dc67f;
+  } [a0_0x5310b3(0x248)]() {
+    const _0x1da77f = a0_0x5310b3;
+    let _0x48400b = !0x1;
+    return this !== graph[_0x1da77f(0x22b)][_0x1da77f(0xd3)] && this !== graph[_0x1da77f(0x22b)]['nodeTo'] && this !== graph['robotB'][_0x1da77f(0xd3)] && this !== graph[_0x1da77f(0x213)][_0x1da77f(0x1ee)] || (_0x48400b = !0x0), _0x48400b;
+  } [a0_0x5310b3(0x1bc)](_0x251a81) {
+    const _0x51ded8 = a0_0x5310b3;
+    if (parameters[_0x51ded8(0xc8)] && _0x51ded8(0x15f) !== this[_0x51ded8(0x105)][_0x51ded8(0x132)][_0x51ded8(0x1e1)]) {
+      _0x251a81[_0x51ded8(0x204)](parameters[_0x51ded8(0x163)]);
+      let _0x202750 = graph[_0x51ded8(0x105)]['getNode'](this[_0x51ded8(0xe4)][0x0])[_0x51ded8(0x273)], _0x1e9c0f = graph[_0x51ded8(0x105)]['getNode'](this[_0x51ded8(0xe4)][0x1])[_0x51ded8(0x273)];
+      _0x251a81[_0x51ded8(0x121)](HSB, 0xff), _0x251a81['stroke'](0x32, 0xff, 0xff, 0x64), _0x251a81['line'](this[_0x51ded8(0x273)]['x'], this[_0x51ded8(0x273)]['y'], this[_0x51ded8(0x273)]['z'], _0x202750['x'], _0x202750['y'], _0x202750['z']), _0x251a81[_0x51ded8(0xb4)](0xd2, 0xff, 0xff, 0x64), _0x251a81['line'](this[_0x51ded8(0x273)]['x'], this[_0x51ded8(0x273)]['y'], this[_0x51ded8(0x273)]['z'], _0x1e9c0f['x'], _0x1e9c0f['y'], _0x1e9c0f['z']);
+    } if (this['nodeBorder'] ? (_0x251a81[_0x51ded8(0xb4)](0x96), _0x251a81[_0x51ded8(0x204)](parameters[_0x51ded8(0x16b)] * this[_0x51ded8(0x105)][_0x51ded8(0x23b)])) : _0x251a81[_0x51ded8(0x11e)](), this[_0x51ded8(0x105)][_0x51ded8(0x17d)]) {
+      if (_0x251a81[_0x51ded8(0x12b)](), _0x251a81['translate'](this[_0x51ded8(0x273)]['x'], this[_0x51ded8(0x273)]['y'], this[_0x51ded8(0x273)]['z']), deleteNodeMode && !this[_0x51ded8(0x248)]() && _0x251a81 === graphicsForGraph ? _0x251a81['fill'](parameters['deleteNodeColor']) : this[_0x51ded8(0x293)] ? _0x251a81[_0x51ded8(0xc6)](0x0, 0xff, 0x0) : this[_0x51ded8(0xfa)] ? _0x251a81['fill'](0x32, 0x32, 0x32) : this[_0x51ded8(0xc1)] ? _0x251a81[_0x51ded8(0xc6)](parameters[_0x51ded8(0xb3)]) : this['firstNodeOfEdge'] ? _0x251a81[_0x51ded8(0xc6)](parameters[_0x51ded8(0x114)]) : _0x251a81[_0x51ded8(0xc6)](parameters[_0x51ded8(0x212)]), parameters[_0x51ded8(0x177)]) _0x251a81['sphere'](0.5 * parameters[_0x51ded8(0x16b)], parameters[_0x51ded8(0x1b8)], parameters['sphereDetail']);
+      else {
+        let _0x376b3b = _0x251a81[_0x51ded8(0xff)][_0x51ded8(0x1f3)](), _0x4471c3 = QuaternionToEuler(_0x376b3b[0x0], _0x376b3b[0x1], _0x376b3b[0x2], _0x376b3b[0x3]);
+        _0x251a81[_0x51ded8(0x150)](-_0x4471c3[0x0]), _0x251a81[_0x51ded8(0x1f9)](-_0x4471c3[0x1]), _0x251a81[_0x51ded8(0xd1)](-_0x4471c3[0x2]), _0x251a81[_0x51ded8(0x1a8)](0x0, 0x0, 0xa), _0x251a81['stroke'](0x0), _0x251a81['strokeWeight'](0x1), _0x251a81[_0x51ded8(0xfc)](0x0, 0x0, parameters[_0x51ded8(0x16b)], parameters['nodeSize']);
+      } _0x251a81['pop']();
+    }
+  } [a0_0x5310b3(0x225)](_0x5cd4a7) {
+    const _0x287f49 = a0_0x5310b3;
+    if (_0x5cd4a7['fill'](0x0, 0x0, 0x0), _0x5cd4a7['textAlign'](CENTER, CENTER), _0x5cd4a7['textFont'](font), _0x5cd4a7[_0x287f49(0x107)](0x1e), this[_0x287f49(0x105)][_0x287f49(0x17d)]) {
+      let _0xa6b639 = _0x5cd4a7[_0x287f49(0xff)][_0x287f49(0x1f3)](), _0x8c463b = QuaternionToEuler(_0xa6b639[0x0], _0xa6b639[0x1], _0xa6b639[0x2], _0xa6b639[0x3]);
+      _0x5cd4a7[_0x287f49(0x12b)](), _0x5cd4a7[_0x287f49(0x1a8)](this[_0x287f49(0x273)]['x'], this['position']['y'], this[_0x287f49(0x273)]['z']), _0x5cd4a7[_0x287f49(0x150)](-_0x8c463b[0x0]), _0x5cd4a7[_0x287f49(0x1f9)](-_0x8c463b[0x1]), _0x5cd4a7[_0x287f49(0xd1)](-_0x8c463b[0x2]);
+      let _0x508e7d = max(parameters[_0x287f49(0x16b)], parameters[_0x287f49(0x13a)], parameters[_0x287f49(0x28b)]);
+      _0x5cd4a7[_0x287f49(0x1a8)](parameters['labelX'], parameters['labelY'], _0x508e7d + parameters[_0x287f49(0xae)]), _0x5cd4a7[_0x287f49(0xcc)](this['labelText'], 0x0, 0x0), _0x5cd4a7[_0x287f49(0x106)]();
+    } else _0x5cd4a7[_0x287f49(0x12b)](), _0x5cd4a7[_0x287f49(0x1a8)](this[_0x287f49(0x273)]['x'], this[_0x287f49(0x273)]['y'], this['position']['z']), _0x5cd4a7[_0x287f49(0xcc)](this[_0x287f49(0x154)], 0x0, 0x0), _0x5cd4a7['pop']();
+  }
+} class Edge {
+  constructor(_0xaed71c, _0x939a3c, _0x15a482, _0x108289) {
+    const _0x4eab3d = a0_0x5310b3;
+    this[_0x4eab3d(0x105)] = _0xaed71c, this[_0x4eab3d(0x141)] = _0xaed71c[_0x4eab3d(0x141)], this[_0x4eab3d(0xe4)] = _0x939a3c, this[_0x4eab3d(0xd3)] = _0x15a482, this[_0x4eab3d(0x1ee)] = _0x108289, this['subPoints'] = [], this[_0x4eab3d(0x168)], Array[_0x4eab3d(0xed)](this[_0x4eab3d(0xd3)][_0x4eab3d(0xe4)]) && Array[_0x4eab3d(0xed)](this[_0x4eab3d(0x1ee)][_0x4eab3d(0xe4)]) ? this['nodeFrom'][_0x4eab3d(0xe4)][0x0] === this[_0x4eab3d(0x1ee)][_0x4eab3d(0xe4)][0x0] ? this[_0x4eab3d(0x101)] = 'robotBedge' : this[_0x4eab3d(0xd3)][_0x4eab3d(0xe4)][0x1] === this[_0x4eab3d(0x1ee)][_0x4eab3d(0xe4)][0x1] ? this[_0x4eab3d(0x101)] = _0x4eab3d(0x117) : print(_0x4eab3d(0x220)) : this[_0x4eab3d(0x101)] = _0x4eab3d(0xf1);
+  } ['amountAlong'](_0x468059) {
+    const _0x5c62e2 = a0_0x5310b3;
+    return p5[_0x5c62e2(0x1f6)][_0x5c62e2(0xd4)](this[_0x5c62e2(0xd3)][_0x5c62e2(0x273)], this['nodeTo'][_0x5c62e2(0x273)], _0x468059);
+  } [a0_0x5310b3(0x206)](_0x3d76b0) {
+    const _0x4914d9 = a0_0x5310b3;
+    return _0x3d76b0 === this[_0x4914d9(0xd3)] || _0x3d76b0 === this['nodeTo'];
+  } ['getPosition'](_0x175bb0) {
+    const _0x1bb4b5 = a0_0x5310b3;
+    return p5[_0x1bb4b5(0x1f6)][_0x1bb4b5(0xd4)](this[_0x1bb4b5(0xd3)][_0x1bb4b5(0x273)], this['nodeTo']['position'], _0x175bb0);
+  } [a0_0x5310b3(0x1bc)](_0x108f49, _0x59adbf, _0x5aa79d) {
+    const _0x2d0da3 = a0_0x5310b3;
+    if (void 0x0 === this[_0x2d0da3(0x168)] ? 0x0 === this[_0x2d0da3(0x1a0)] ? _0x108f49[_0x2d0da3(0xb4)](parameters[_0x2d0da3(0x125)]) : 0x1 === this[_0x2d0da3(0x1a0)] ? _0x108f49[_0x2d0da3(0xb4)](parameters[_0x2d0da3(0xc9)]) : _0x2d0da3(0xf1) === this['edgeType'] ? _0x108f49[_0x2d0da3(0xb4)](parameters[_0x2d0da3(0x1df)]) : _0x2d0da3(0x11b) === this[_0x2d0da3(0x101)] ? _0x108f49[_0x2d0da3(0xb4)](parameters['colorRobotB']) : _0x2d0da3(0x117) === this[_0x2d0da3(0x101)] && _0x108f49[_0x2d0da3(0xb4)](parameters[_0x2d0da3(0x125)]) : 0x0 === this['owner'][_0x2d0da3(0x258)] ? _0x108f49[_0x2d0da3(0xb4)](parameters[_0x2d0da3(0x125)]) : 0x1 === this[_0x2d0da3(0x168)][_0x2d0da3(0x258)] ? _0x108f49[_0x2d0da3(0xb4)](parameters[_0x2d0da3(0xc9)]) : _0x108f49['stroke'](0x0, 0xff, 0x0), _0x2d0da3(0xf1) === this[_0x2d0da3(0x101)] ? _0x108f49['strokeWeight'](parameters[_0x2d0da3(0x1fd)] * (void 0x0 === _0x59adbf ? 0x1 : _0x59adbf)) : _0x108f49[_0x2d0da3(0x204)](parameters['edgeWidthConfigSpace'] * (void 0x0 === _0x59adbf ? 0x1 : _0x59adbf)), void 0x0 !== _0x5aa79d && _0x108f49['stroke'](_0x5aa79d), _0x108f49[_0x2d0da3(0xd0)](this[_0x2d0da3(0xd3)][_0x2d0da3(0x273)]['x'], this[_0x2d0da3(0xd3)][_0x2d0da3(0x273)]['y'], this[_0x2d0da3(0xd3)][_0x2d0da3(0x273)]['z'], this[_0x2d0da3(0x1ee)][_0x2d0da3(0x273)]['x'], this[_0x2d0da3(0x1ee)][_0x2d0da3(0x273)]['y'], this[_0x2d0da3(0x1ee)][_0x2d0da3(0x273)]['z']), parameters[_0x2d0da3(0x1a7)]) {
+      let _0x2161d7;
+      _0x2d0da3(0xf1) === this['edgeType'] ? _0x2161d7 = 0x1 : _0x2d0da3(0x11b) === this['edgeType'] ? _0x2161d7 = parameters['granularityFirstCoordinate'] : _0x2d0da3(0x117) === this['edgeType'] && (_0x2161d7 = parameters[_0x2d0da3(0x16c)]);
+      for (let _0x1f0615 = 0x1;
+        _0x1f0615 < _0x2161d7;
+        _0x1f0615++)this[_0x2d0da3(0xaf)][_0x1f0615] = p5[_0x2d0da3(0x1f6)][_0x2d0da3(0xd4)](this[_0x2d0da3(0xd3)][_0x2d0da3(0x273)], this[_0x2d0da3(0x1ee)]['position'], 0x1 * _0x1f0615 / _0x2161d7);
+    }
+  }
+} class Square {
+  constructor(_0x5984b1, _0x4e93ee, _0x2a69cf, _0x4a45b3, _0x2d35c2, _0x45832f) {
+    const _0x1333d0 = a0_0x5310b3;
+    this[_0x1333d0(0x105)] = _0x5984b1, this['graphics'] = _0x5984b1['graphics'], this['label'] = _0x4e93ee, this[_0x1333d0(0x24f)] = _0x2a69cf, this[_0x1333d0(0x252)] = _0x4a45b3, this[_0x1333d0(0x15c)] = _0x2d35c2, this[_0x1333d0(0x235)] = _0x45832f, this['subPoints'] = [], verbose && print('square\x20created!'), verbose && print(this);
+  } ['getPosition'](_0x4c5d2c, _0x366813) {
+    const _0x38d955 = a0_0x5310b3;
+    let _0x3e9743 = edgeAfrom[_0x38d955(0x17f)](_0x4c5d2c), _0x3a1bef = edgeAto[_0x38d955(0x17f)](_0x4c5d2c);
+    return p5['Vector'][_0x38d955(0xd4)](_0x3e9743, _0x3a1bef, _0x366813);
+  } [a0_0x5310b3(0x1bc)]() {
+    const _0x1c4e59 = a0_0x5310b3;
+    if (parameters[_0x1c4e59(0x1a7)]) {
+      this['graphics']['strokeWeight'](parameters[_0x1c4e59(0xc0)]);
+      let _0x53c44a = min(this[_0x1c4e59(0x24f)][_0x1c4e59(0xaf)][_0x1c4e59(0x147)], parameters[_0x1c4e59(0x274)]);
+      for (let _0x3f532c = 0x1;
+        _0x3f532c < _0x53c44a;
+        _0x3f532c++) {
+          let _0x1cd1a0 = this[_0x1c4e59(0x24f)][_0x1c4e59(0xaf)][_0x3f532c], _0x21ae6f = this[_0x1c4e59(0x252)][_0x1c4e59(0xaf)][_0x3f532c];
+        this[_0x1c4e59(0x141)]['stroke'](parameters[_0x1c4e59(0x125)]), this[_0x1c4e59(0x141)][_0x1c4e59(0xd0)](_0x1cd1a0['x'], _0x1cd1a0['y'], _0x1cd1a0['z'], _0x21ae6f['x'], _0x21ae6f['y'], _0x21ae6f['z']);
+      } let _0x348e18 = min(this[_0x1c4e59(0x15c)][_0x1c4e59(0xaf)][_0x1c4e59(0x147)], parameters[_0x1c4e59(0x16c)]);
+      for (let _0x1ef276 = 0x1;
+        _0x1ef276 < _0x348e18;
+        _0x1ef276++) {
+          let _0x2913f0 = this['edgeBfrom']['subPoints'][_0x1ef276], _0x10499a = this[_0x1c4e59(0x235)][_0x1c4e59(0xaf)][_0x1ef276];
+        this[_0x1c4e59(0x141)][_0x1c4e59(0xb4)](parameters['colorRobotB']), this['graphics'][_0x1c4e59(0xd0)](_0x2913f0['x'], _0x2913f0['y'], _0x2913f0['z'], _0x10499a['x'], _0x10499a['y'], _0x10499a['z']);
+      }
+    } parameters[_0x1c4e59(0x160)] && (this[_0x1c4e59(0x141)][_0x1c4e59(0x11e)](), this['graphics'][_0x1c4e59(0xc6)](red(parameters['squareColor']), green(parameters[_0x1c4e59(0xd5)]), blue(parameters[_0x1c4e59(0xd5)]), parameters[_0x1c4e59(0xc4)]), this[_0x1c4e59(0x141)][_0x1c4e59(0x1fb)](), this[_0x1c4e59(0x141)][_0x1c4e59(0x1da)](this[_0x1c4e59(0x24f)][_0x1c4e59(0xd3)]['position']['x'], this[_0x1c4e59(0x24f)]['nodeFrom']['position']['y'], this[_0x1c4e59(0x24f)][_0x1c4e59(0xd3)][_0x1c4e59(0x273)]['z']), this[_0x1c4e59(0x141)]['vertex'](this['edgeAfrom'][_0x1c4e59(0x1ee)]['position']['x'], this['edgeAfrom'][_0x1c4e59(0x1ee)][_0x1c4e59(0x273)]['y'], this[_0x1c4e59(0x24f)][_0x1c4e59(0x1ee)][_0x1c4e59(0x273)]['z']), this[_0x1c4e59(0x141)]['vertex'](this['edgeAto'][_0x1c4e59(0x1ee)][_0x1c4e59(0x273)]['x'], this[_0x1c4e59(0x252)][_0x1c4e59(0x1ee)][_0x1c4e59(0x273)]['y'], this['edgeAto']['nodeTo'][_0x1c4e59(0x273)]['z']), this['graphics'][_0x1c4e59(0x1da)](this['edgeAto']['nodeFrom'][_0x1c4e59(0x273)]['x'], this[_0x1c4e59(0x252)][_0x1c4e59(0xd3)]['position']['y'], this['edgeAto'][_0x1c4e59(0xd3)]['position']['z']), this['graphics'][_0x1c4e59(0x1a9)](CLOSE));
+  }
+} class Robot {
+  constructor(_0x1d0df7, _0xb5afdb, _0x14fb5b) {
+    const _0x36cc88 = a0_0x5310b3;
+    this[_0x36cc88(0x15f)] = _0x1d0df7, this['nodeFrom'] = _0xb5afdb, this[_0x36cc88(0x1ee)] = _0xb5afdb, this[_0x36cc88(0x1ce)] = 0x0, this[_0x36cc88(0x258)] = _0x14fb5b, this['visited'] = [];
+  } [a0_0x5310b3(0x211)]() {
+    const _0x4e3e9b = a0_0x5310b3;
+    return [this[_0x4e3e9b(0xd3)], this[_0x4e3e9b(0x1ee)]];
+  } ['getCandidates']() {
+    const _0x324713 = a0_0x5310b3;
+    return this[_0x324713(0xd3)][_0x324713(0x179)]['filter'](_0x5ba160 => !this[_0x324713(0x15f)][_0x324713(0x216)](this)['occupyingNodes']()['includes'](_0x5ba160));
+  } [a0_0x5310b3(0x230)]() {
+    const _0x21b372 = a0_0x5310b3;
+    let _0x498d9f = this[_0x21b372(0x15f)][_0x21b372(0x216)](this)[_0x21b372(0x211)]()[_0x21b372(0xab)](_0x163462 => _0x163462[_0x21b372(0xe4)]);
+    return this['graph'][_0x21b372(0x222)][_0x21b372(0x218)](_0x3264bb => !_0x498d9f[_0x21b372(0xfb)](_0x3264bb[0x0]) && !_0x498d9f[_0x21b372(0xfb)](_0x3264bb[0x1]));
+  } [a0_0x5310b3(0x192)]() {
+    const _0x1190ed = a0_0x5310b3;
+    let _0x4d187d = this[_0x1190ed(0x261)]();
+    return _0x4d187d[_0x1190ed(0x147)] > 0x0 && _0x4d187d[floor(random(_0x4d187d[_0x1190ed(0x147)]))];
+  } [a0_0x5310b3(0x238)](_0x4e8528) {
+    const _0x477bf5 = a0_0x5310b3;
+    this[_0x477bf5(0x237)][_0x477bf5(0x12b)](_0x4e8528), this['nodeTo'] = _0x4e8528, this[_0x477bf5(0x1ce)] = 0.0001, this[_0x477bf5(0x15f)]['graphLayout'][_0x477bf5(0x128)](this[_0x477bf5(0xd3)]['label'], this['nodeTo'][_0x477bf5(0xe4)], !0x1)[_0x477bf5(0x168)] = this;
+  } [a0_0x5310b3(0x143)](_0x524b6e) {
+    const _0x286749 = a0_0x5310b3;
+    this[_0x286749(0x1ee)] = _0x524b6e, this[_0x286749(0x15f)]['graphLayout'][_0x286749(0x128)](this[_0x286749(0xd3)][_0x286749(0xe4)], this[_0x286749(0x1ee)][_0x286749(0xe4)], !0x1)[_0x286749(0x168)] = this;
+  } [a0_0x5310b3(0xad)]() {
+    const _0x5e7fb4 = a0_0x5310b3;
+    console[_0x5e7fb4(0x1e3)](_0x5e7fb4(0xad));
+    let _0x1a9a44 = this[_0x5e7fb4(0x261)]();
+    _0x1a9a44['length'] > 0x0 && (this[_0x5e7fb4(0x1ee)] = _0x1a9a44[floor(random(_0x1a9a44[_0x5e7fb4(0x147)]))]);
+  } [a0_0x5310b3(0x200)](_0x486b9d) {
+    const _0x37dfa1 = a0_0x5310b3;
+    if (this['nodeFrom'] !== this[_0x37dfa1(0x1ee)] && (this[_0x37dfa1(0x1ce)] = constrain(_0x486b9d, 0x0, 0x1)), 0x0 === this[_0x37dfa1(0x1ce)] && (verbose && console[_0x37dfa1(0x1e3)](_0x37dfa1(0x15a)), verbose && console[_0x37dfa1(0x1e3)](this[_0x37dfa1(0xd3)]['label'] + '\x20' + this['nodeTo'][_0x37dfa1(0xe4)]), verbose && console[_0x37dfa1(0x1e3)](this[_0x37dfa1(0x15f)][_0x37dfa1(0x105)][_0x37dfa1(0x128)](this[_0x37dfa1(0xd3)][_0x37dfa1(0xe4)], this[_0x37dfa1(0x1ee)]['label'], !0x1)), this[_0x37dfa1(0xd3)] !== this['nodeTo'] && (this[_0x37dfa1(0x15f)][_0x37dfa1(0x105)][_0x37dfa1(0x128)](this[_0x37dfa1(0xd3)][_0x37dfa1(0xe4)], this[_0x37dfa1(0x1ee)][_0x37dfa1(0xe4)], !0x1)[_0x37dfa1(0x168)] = void 0x0, this[_0x37dfa1(0x1ee)] = this[_0x37dfa1(0xd3)]), parameters[_0x37dfa1(0x1bf)])) {
+      let _0xb65d2f = this[_0x37dfa1(0x192)]();
+      if (!_0xb65d2f) return !0x1;
+      this['setNodeTo'](_0xb65d2f);
+    } 0x1 === this[_0x37dfa1(0x1ce)] && (verbose && console[_0x37dfa1(0x1e3)]('this.amount\x20===\x201.0'), verbose && console[_0x37dfa1(0x1e3)](this['nodeFrom'][_0x37dfa1(0xe4)] + '\x20' + this[_0x37dfa1(0x1ee)][_0x37dfa1(0xe4)]), verbose && console[_0x37dfa1(0x1e3)](this[_0x37dfa1(0x15f)]['graphLayout'][_0x37dfa1(0x128)](this[_0x37dfa1(0xd3)][_0x37dfa1(0xe4)], this[_0x37dfa1(0x1ee)][_0x37dfa1(0xe4)], !0x1)), this[_0x37dfa1(0xd3)] !== this[_0x37dfa1(0x1ee)] && (verbose && console['log'](_0x37dfa1(0xfe)), this[_0x37dfa1(0x15f)][_0x37dfa1(0x105)][_0x37dfa1(0x128)](this[_0x37dfa1(0xd3)][_0x37dfa1(0xe4)], this[_0x37dfa1(0x1ee)][_0x37dfa1(0xe4)], !0x1)[_0x37dfa1(0x168)] = void 0x0, this[_0x37dfa1(0x1ce)] = 0x0, this[_0x37dfa1(0xd3)] = this['nodeTo']));
+  } [a0_0x5310b3(0x1a4)]() {
+    const _0x515a40 = a0_0x5310b3;
+    return p5[_0x515a40(0x1f6)][_0x515a40(0xd4)](this[_0x515a40(0xd3)][_0x515a40(0x273)], this[_0x515a40(0x1ee)][_0x515a40(0x273)], this[_0x515a40(0x1ce)]);
+  } [a0_0x5310b3(0x1f5)]() {
+    const _0x2fafd8 = a0_0x5310b3;
+    return this[_0x2fafd8(0xd3)] === this[_0x2fafd8(0x1ee)];
+  } [a0_0x5310b3(0x1bc)](_0x43573e) {
+    const _0x51cd7c = a0_0x5310b3;
+    let _0x5a7469 = this['getPosition']();
+    if (this[_0x51cd7c(0x241)] ? (_0x43573e[_0x51cd7c(0xb4)](0x96), _0x43573e[_0x51cd7c(0x204)](parameters['graphRobotSize'] * this['graphLayout']['nodeBorderWidth'])) : _0x43573e[_0x51cd7c(0x11e)](), _0x43573e['fill'](0x0 === this[_0x51cd7c(0x258)] ? parameters[_0x51cd7c(0x125)] : parameters[_0x51cd7c(0xc9)]), this[_0x51cd7c(0x15f)]['graphLayout'][_0x51cd7c(0x17d)]) {
+      if (_0x43573e[_0x51cd7c(0x12b)](), _0x43573e[_0x51cd7c(0x1a8)](_0x5a7469['x'], _0x5a7469['y'], _0x5a7469['z']), parameters[_0x51cd7c(0x177)]) {
+        let _0x21df60 = parameters[_0x51cd7c(0x1b8)];
+        _0x43573e[_0x51cd7c(0x131)]((this[_0x51cd7c(0xc1)] ? 0.55 : 0.5) * parameters[_0x51cd7c(0x28b)], _0x21df60, _0x21df60);
+      } else {
+        let _0x139329 = _0x43573e[_0x51cd7c(0xff)][_0x51cd7c(0x1f3)](), _0x2efb2c = QuaternionToEuler(_0x139329[0x0], _0x139329[0x1], _0x139329[0x2], _0x139329[0x3]);
+        _0x43573e[_0x51cd7c(0x150)](-_0x2efb2c[0x0]), _0x43573e[_0x51cd7c(0x1f9)](-_0x2efb2c[0x1]), _0x43573e['rotateZ'](-_0x2efb2c[0x2]), _0x43573e['translate'](0x0, 0x0, 0x14), _0x43573e[_0x51cd7c(0xfc)](0x0, 0x0, (this[_0x51cd7c(0xc1)] ? 1.1 : 0x1) * parameters[_0x51cd7c(0x28b)], (this['active'] ? 1.1 : 0x1) * parameters[_0x51cd7c(0x28b)]);
+      } _0x43573e['pop']();
+    }
+  }
+} class Configuration {
+  constructor(_0x388311, _0x25f4b4, _0x516035) {
+    const _0x590c93 = a0_0x5310b3;
+    this[_0x590c93(0x105)] = _0x388311, this[_0x590c93(0x22b)] = _0x25f4b4, this[_0x590c93(0x213)] = _0x516035, this[_0x590c93(0x1f2)] = [], this['updatePosition'](this[_0x590c93(0x22b)][_0x590c93(0xd3)], this[_0x590c93(0x22b)]['nodeTo'], this[_0x590c93(0x22b)][_0x590c93(0x1ce)], this[_0x590c93(0x213)]['nodeFrom'], this[_0x590c93(0x213)][_0x590c93(0x1ee)], this[_0x590c93(0x213)][_0x590c93(0x1ce)]);
+  } [a0_0x5310b3(0x116)](_0x1361ff, _0x432792, _0xe0f826, _0x46daa0, _0x2aca47, _0x19482b) {
+    const _0x305a46 = a0_0x5310b3;
+    this[_0x305a46(0x273)] = this[_0x305a46(0x1a4)](_0x1361ff, _0x432792, _0xe0f826, _0x46daa0, _0x2aca47, _0x19482b);
+  } [a0_0x5310b3(0x1a4)](_0x4143d0, _0x373890, _0x3eb487, _0x32a6b1, _0x680014, _0xbb5a63) {
+    const _0x4008ce = a0_0x5310b3;
+    let _0x5229e5;
+    if (0x0 === _0x3eb487 && 0x0 === _0xbb5a63) {
+      let _0x278461 = [_0x4143d0[_0x4008ce(0xe4)], _0x32a6b1[_0x4008ce(0xe4)]];
+      _0x5229e5 = this[_0x4008ce(0x105)][_0x4008ce(0x14c)](_0x278461)[_0x4008ce(0x273)];
+    } else {
+      if (_0x3eb487 > 0x0 && 0x0 === _0xbb5a63) {
+        let _0x34ed45 = [_0x4143d0[_0x4008ce(0xe4)], _0x32a6b1['label']], _0xcb636e = [_0x373890[_0x4008ce(0xe4)], _0x32a6b1['label']], _0x583e9f = this[_0x4008ce(0x105)][_0x4008ce(0x14c)](_0x34ed45), _0x7917b2 = this['graphLayout'][_0x4008ce(0x14c)](_0xcb636e);
+        _0x5229e5 = p5[_0x4008ce(0x1f6)]['lerp'](_0x583e9f[_0x4008ce(0x273)], _0x7917b2[_0x4008ce(0x273)], _0x3eb487);
+      } else {
+        if (0x0 === _0x3eb487 && _0xbb5a63 > 0x0) {
+          let _0xf4d118 = [_0x4143d0[_0x4008ce(0xe4)], _0x32a6b1[_0x4008ce(0xe4)]], _0x53af83 = [_0x4143d0[_0x4008ce(0xe4)], _0x680014['label']], _0x4b2d79 = this[_0x4008ce(0x105)]['getNode'](_0xf4d118), _0x4bd651 = this[_0x4008ce(0x105)][_0x4008ce(0x14c)](_0x53af83);
+          _0x5229e5 = p5['Vector']['lerp'](_0x4b2d79[_0x4008ce(0x273)], _0x4bd651[_0x4008ce(0x273)], _0xbb5a63);
+        } else {
+          let _0xac1a63 = this['graphLayout'][_0x4008ce(0x14c)]([_0x4143d0['label'], _0x32a6b1[_0x4008ce(0xe4)]])[_0x4008ce(0x273)], _0x1c83ff = this[_0x4008ce(0x105)][_0x4008ce(0x14c)]([_0x373890[_0x4008ce(0xe4)], _0x32a6b1[_0x4008ce(0xe4)]])[_0x4008ce(0x273)], _0x53ccff = this['graphLayout'][_0x4008ce(0x14c)]([_0x4143d0[_0x4008ce(0xe4)], _0x680014[_0x4008ce(0xe4)]])[_0x4008ce(0x273)], _0x536489 = this[_0x4008ce(0x105)][_0x4008ce(0x14c)]([_0x373890[_0x4008ce(0xe4)], _0x680014[_0x4008ce(0xe4)]])['position'], _0x234d13 = p5[_0x4008ce(0x1f6)][_0x4008ce(0xd4)](_0xac1a63, _0x1c83ff, _0x3eb487), _0x5cf57d = p5[_0x4008ce(0x1f6)][_0x4008ce(0xd4)](_0x53ccff, _0x536489, _0x3eb487);
+          _0x5229e5 = p5[_0x4008ce(0x1f6)][_0x4008ce(0xd4)](_0x234d13, _0x5cf57d, _0xbb5a63);
+        }
+      }
+    } return _0x5229e5;
+  } [a0_0x5310b3(0x26d)](_0x1964c5, _0x2e9d49, _0x2c3f37, _0xf20539, _0x454e1f, _0x2a9fce) {
+    const _0x3d55e5 = a0_0x5310b3;
+    let _0x360209 = this[_0x3d55e5(0x105)]['getNode']([_0x1964c5['label'], _0xf20539[_0x3d55e5(0xe4)]])[_0x3d55e5(0x273)], _0x41935f = this[_0x3d55e5(0x105)][_0x3d55e5(0x14c)]([_0x2e9d49['label'], _0xf20539[_0x3d55e5(0xe4)]])['position'], _0x167285 = this['graphLayout'][_0x3d55e5(0x14c)]([_0x1964c5[_0x3d55e5(0xe4)], _0x454e1f[_0x3d55e5(0xe4)]])[_0x3d55e5(0x273)], _0x2f341a = this[_0x3d55e5(0x105)][_0x3d55e5(0x14c)]([_0x2e9d49[_0x3d55e5(0xe4)], _0x454e1f['label']])[_0x3d55e5(0x273)];
+    return [p5[_0x3d55e5(0x1f6)][_0x3d55e5(0xd4)](_0x360209, _0x41935f, _0x2c3f37), p5[_0x3d55e5(0x1f6)][_0x3d55e5(0xd4)](_0x167285, _0x2f341a, _0x2c3f37), p5[_0x3d55e5(0x1f6)][_0x3d55e5(0xd4)](_0x360209, _0x167285, _0x2a9fce), p5[_0x3d55e5(0x1f6)][_0x3d55e5(0xd4)](_0x41935f, _0x2f341a, _0x2a9fce)];
+  } [a0_0x5310b3(0x16a)](_0x1bee35, _0x5db6a3, _0x47fded, _0x242b3e, _0x24b172) {
+    const _0x472371 = a0_0x5310b3;
+    if (_0x24b172) {
+      let _0x1c0c8b = this[_0x472371(0x105)][_0x472371(0x14c)]([_0x1bee35[_0x472371(0xe4)], _0x242b3e[0x0]])['position'], _0x590663 = this[_0x472371(0x105)]['getNode']([_0x5db6a3[_0x472371(0xe4)], _0x242b3e[0x0]])['position'], _0x20d8c4 = this[_0x472371(0x105)][_0x472371(0x14c)]([_0x1bee35[_0x472371(0xe4)], _0x242b3e[0x1]])[_0x472371(0x273)], _0x2614b0 = this[_0x472371(0x105)]['getNode']([_0x5db6a3[_0x472371(0xe4)], _0x242b3e[0x1]])[_0x472371(0x273)];
+      return [p5['Vector'][_0x472371(0xd4)](_0x1c0c8b, _0x590663, _0x47fded), p5[_0x472371(0x1f6)][_0x472371(0xd4)](_0x20d8c4, _0x2614b0, _0x47fded)];
+    } {
+      let _0x1477a6 = this[_0x472371(0x105)][_0x472371(0x14c)]([_0x242b3e[0x0], _0x1bee35[_0x472371(0xe4)]])[_0x472371(0x273)], _0xd19721 = this['graphLayout'][_0x472371(0x14c)]([_0x242b3e[0x0], _0x5db6a3['label']])[_0x472371(0x273)], _0x4d19f0 = this[_0x472371(0x105)][_0x472371(0x14c)]([_0x242b3e[0x1], _0x1bee35['label']])['position'], _0x18fc92 = this['graphLayout'][_0x472371(0x14c)]([_0x242b3e[0x1], _0x5db6a3[_0x472371(0xe4)]])[_0x472371(0x273)];
+      return [p5[_0x472371(0x1f6)][_0x472371(0xd4)](_0x1477a6, _0xd19721, _0x47fded), p5[_0x472371(0x1f6)][_0x472371(0xd4)](_0x4d19f0, _0x18fc92, _0x47fded)];
+    }
+  } [a0_0x5310b3(0x27d)](_0x2dd3fa, _0x1b48ec, _0x451f2b, _0x11b3c9, _0x14b2e2, _0x504d6e) {
+    const _0x2c1380 = a0_0x5310b3;
+    this['history'][_0x2c1380(0x12b)]([_0x2dd3fa, _0x1b48ec, _0x451f2b, _0x11b3c9, _0x14b2e2, _0x504d6e]);
+  } [a0_0x5310b3(0x1a1)]() {
+    const _0x31fc70 = a0_0x5310b3;
+    this[_0x31fc70(0x1f2)] = [];
+  } [a0_0x5310b3(0x1bc)]() {
+    const _0x4a132d = a0_0x5310b3;
+    if (parameters['showHistory']) for (let _0x54573c = 0x0;
+      _0x54573c < this[_0x4a132d(0x1f2)][_0x4a132d(0x147)] - 0x1;
+      _0x54573c++) {
+        let _0x5b97c9 = this[_0x4a132d(0x1f2)][_0x54573c], _0x4fa215 = this[_0x4a132d(0x1f2)][_0x54573c + 0x1], _0x531433 = this[_0x4a132d(0x1a4)](_0x5b97c9[0x0], _0x5b97c9[0x1], _0x5b97c9[0x2], _0x5b97c9[0x3], _0x5b97c9[0x4], _0x5b97c9[0x5]), _0x72bb22 = this[_0x4a132d(0x1a4)](_0x4fa215[0x0], _0x4fa215[0x1], _0x4fa215[0x2], _0x4fa215[0x3], _0x4fa215[0x4], _0x4fa215[0x5]);
+      this[_0x4a132d(0x105)][_0x4a132d(0x141)][_0x4a132d(0xb4)](0x0), this[_0x4a132d(0x105)]['graphics'][_0x4a132d(0x204)](0x1), this['graphLayout'][_0x4a132d(0x141)][_0x4a132d(0xd0)](_0x531433['x'], _0x531433['y'], _0x531433['z'], _0x72bb22['x'], _0x72bb22['y'], _0x72bb22['z']);
+    } this[_0x4a132d(0x1d7)](this[_0x4a132d(0x22b)][_0x4a132d(0xd3)], this[_0x4a132d(0x22b)]['nodeTo'], this[_0x4a132d(0x22b)][_0x4a132d(0x1ce)], this['robotB'][_0x4a132d(0xd3)], this['robotB']['nodeTo'], this[_0x4a132d(0x213)][_0x4a132d(0x1ce)]);
+  } [a0_0x5310b3(0x1d7)](_0x183f05, _0xc15564, _0x243a22, _0x328781, _0x2aab9d, _0x56d14a) {
+    const _0xa77a9d = a0_0x5310b3;
+    this['updatePosition'](_0x183f05, _0xc15564, _0x243a22, _0x328781, _0x2aab9d, _0x56d14a);
+    let _0xb3acbb = this['robotA'][_0xa77a9d(0x230)](), _0x320df9 = this[_0xa77a9d(0x213)]['getAllPossibleEdges']();
+    if (parameters[_0xa77a9d(0x14d)]) {
+      for (let _0x5e5e58 of _0xb3acbb) {
+        let _0x1a7175 = this[_0xa77a9d(0x16a)](_0x328781, _0x2aab9d, _0x56d14a, _0x5e5e58, !0x1), _0x9c296f = _0x1a7175[0x0], _0x145290 = _0x1a7175[0x1];
+        this[_0xa77a9d(0x105)]['graphics'][_0xa77a9d(0xb4)](parameters[_0xa77a9d(0x125)]), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)]['strokeWeight'](0x8), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xd0)](_0x9c296f['x'], _0x9c296f['y'], _0x9c296f['z'], _0x145290['x'], _0x145290['y'], _0x145290['z']);
+      } for (let _0x195e59 of _0x320df9) {
+        let _0x23c517 = this[_0xa77a9d(0x16a)](_0x183f05, _0xc15564, _0x243a22, _0x195e59, !0x0), _0x44be21 = _0x23c517[0x0], _0x5d96f9 = _0x23c517[0x1];
+        this[_0xa77a9d(0x105)][_0xa77a9d(0x141)]['stroke'](parameters[_0xa77a9d(0xc9)]), this['graphLayout']['graphics'][_0xa77a9d(0x204)](0x8), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xd0)](_0x44be21['x'], _0x44be21['y'], _0x44be21['z'], _0x5d96f9['x'], _0x5d96f9['y'], _0x5d96f9['z']);
+      }
+    } else {
+      if (this['active']) {
+        let _0x5349df = this[_0xa77a9d(0x26d)](_0x183f05, _0xc15564, _0x243a22, _0x328781, _0x2aab9d, _0x56d14a);
+        if (this[_0xa77a9d(0x105)]['graphics'][_0xa77a9d(0x204)](0x8), 0x4 === _0x5349df[_0xa77a9d(0x147)]) {
+          let _0x207247 = _0x5349df[0x0], _0x44b5fe = _0x5349df[0x1];
+          this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xb4)](parameters['colorRobotB']), this['graphLayout'][_0xa77a9d(0x141)][_0xa77a9d(0xd0)](_0x207247['x'], _0x207247['y'], _0x207247['z'], _0x44b5fe['x'], _0x44b5fe['y'], _0x44b5fe['z']);
+          let _0x402218 = _0x5349df[0x2], _0x57654b = _0x5349df[0x3];
+          this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xb4)](parameters['colorRobotA']), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xd0)](_0x402218['x'], _0x402218['y'], _0x402218['z'], _0x57654b['x'], _0x57654b['y'], _0x57654b['z']);
+        }
+      }
+    } if (this[_0xa77a9d(0x105)]['graphics'][_0xa77a9d(0x12b)](), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0x1a8)](this['position']['x'], this[_0xa77a9d(0x273)]['y'], this[_0xa77a9d(0x273)]['z']), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0x11e)](), this[_0xa77a9d(0xc1)] ? this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xc6)](parameters[_0xa77a9d(0xb3)]) : this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xc6)](parameters[_0xa77a9d(0xde)]), parameters['sphereView']) {
+      let _0x23bdd9 = parameters['sphereDetail'];
+      this[_0xa77a9d(0x105)]['graphics'][_0xa77a9d(0x131)](0.5 * parameters[_0xa77a9d(0x13a)], _0x23bdd9, _0x23bdd9);
+    } else {
+      let _0x3763b3 = this[_0xa77a9d(0x105)]['graphics']['easycam'][_0xa77a9d(0x1f3)](), _0xf7ec8b = QuaternionToEuler(_0x3763b3[0x0], _0x3763b3[0x1], _0x3763b3[0x2], _0x3763b3[0x3]);
+      this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0x150)](-_0xf7ec8b[0x0]), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)]['rotateY'](-_0xf7ec8b[0x1]), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)]['rotateZ'](-_0xf7ec8b[0x2]), this['graphLayout'][_0xa77a9d(0x141)][_0xa77a9d(0x1a8)](0x0, 0x0, 0x14), this[_0xa77a9d(0x105)][_0xa77a9d(0x141)][_0xa77a9d(0xfc)](0x0, 0x0, parameters[_0xa77a9d(0x13a)], parameters['configNodeSize']);
+    } this[_0xa77a9d(0x105)][_0xa77a9d(0x141)]['pop']();
+  }
+} function completeGraph(_0x2195ce) {
+  const _0x374204 = a0_0x5310b3;
+  let _0x5b6ca3 = [...Array(_0x2195ce)['keys']()], _0x3c3c29 = [];
+  for (let _0x18ddeb of _0x5b6ca3) for (let _0x1db098 of _0x5b6ca3) _0x18ddeb !== _0x1db098 && _0x18ddeb < _0x1db098 && _0x3c3c29[_0x374204(0x12b)]([_0x18ddeb, _0x1db098]);
+  return new Graph(_0x5b6ca3, _0x3c3c29);
+} function chainGraph(_0x3e6aff) {
+  const _0xb24247 = a0_0x5310b3;
+  let _0x46f099 = [...Array(_0x3e6aff)[_0xb24247(0x1e2)]()], _0x11e7a = [];
+  for (let _0x108a0e of _0x46f099) _0x11e7a[_0xb24247(0x12b)]([_0x108a0e, (_0x108a0e + 0x1) % _0x3e6aff]), verbose && print(_0x108a0e);
+  return new Graph(_0x46f099, _0x11e7a);
+} function wheelGraph(_0x24ebaf) {
+  const _0x3cd104 = a0_0x5310b3;
+  let _0x1e2b3d = [...Array(_0x24ebaf + 0x1)['keys']()], _0x554612 = [];
+  for (let _0x9f8dc2 of _0x1e2b3d) _0x9f8dc2 !== _0x24ebaf && _0x554612[_0x3cd104(0x12b)]([_0x9f8dc2, _0x24ebaf]), _0x554612[_0x3cd104(0x12b)]([_0x9f8dc2, (_0x9f8dc2 + 0x1) % _0x24ebaf]), verbose && print(_0x9f8dc2);
+  return new Graph(_0x1e2b3d, _0x554612);
+} function randomGraph() {
+  return new Graph([0x0, 0x1, 0x2], [[0x0, 0x1], [0x1, 0x2], [0x2, 0x0]]);
+} function completeBipartiteGraph(_0x4bd42f, _0x5f3e6b) {
+  const _0x37d7a0 = a0_0x5310b3;
+  verbose && print(_0x37d7a0(0x28a) + _0x4bd42f + '\x20' + _0x5f3e6b);
+  let _0x23a52b = [...Array(_0x4bd42f)['keys']()], _0x25f47d = [...Array(_0x5f3e6b)[_0x37d7a0(0x1e2)]()]['map'](_0x11151e => _0x11151e + _0x4bd42f), _0x63d281 = [...Array(_0x4bd42f + _0x5f3e6b)[_0x37d7a0(0x1e2)]()], _0x5d8ea9 = [];
+  for (let _0xae2adc of _0x23a52b) for (let _0x26b25b of _0x25f47d) _0x5d8ea9[_0x37d7a0(0x12b)]([_0xae2adc, _0x26b25b]);
+  return new Graph(_0x63d281, _0x5d8ea9);
+} function addNode(_0x58abf0, _0x39412d, _0x32865f) {
+  const _0x5e1a23 = a0_0x5310b3;
+  let _0x534672 = Math['max'](...graph['nodes']) + 0x1;
+  graph[_0x5e1a23(0x1d1)][_0x5e1a23(0x12b)](_0x534672);
+  let _0x244122 = graph[_0x5e1a23(0x105)]['addNode'](_0x534672, _0x58abf0, _0x39412d, _0x32865f);
+  return configuration_space[_0x5e1a23(0x280)](_0x534672), graph['graphLayout'][_0x5e1a23(0x290)] = Math[_0x5e1a23(0x1c2)](0.02, graph[_0x5e1a23(0x105)]['centerForce']), configuration_space[_0x5e1a23(0x105)][_0x5e1a23(0x290)] = Math[_0x5e1a23(0x1c2)](0.02, configuration_space[_0x5e1a23(0x105)][_0x5e1a23(0x290)]), addSingleNodeMode = !0x1, parameters[_0x5e1a23(0x17b)] = _0x5e1a23(0x244), updateURL(), _0x244122;
+} function deleteNode(_0x450091) {
+  const _0x450df1 = a0_0x5310b3;
+  for (neighbor of _0x450091[_0x450df1(0x179)]) neighbor[_0x450df1(0x179)] = neighbor[_0x450df1(0x179)]['filter'](_0x5ce69d => !(_0x5ce69d === _0x450091));
+  graph[_0x450df1(0x1d1)]['splice'](graph[_0x450df1(0x1d1)][_0x450df1(0x188)](_0x450091['label']), 0x1);
+  let _0x21430d = [], _0x2e5efe = [];
+  for (edge of graph['edges']) edge[_0x450df1(0xfb)](_0x450091[_0x450df1(0xe4)]) ? _0x2e5efe['push'](edge) : _0x21430d[_0x450df1(0x12b)](edge);
+  for (edge of (graph[_0x450df1(0x222)] = _0x21430d, _0x2e5efe)) graph[_0x450df1(0x105)][_0x450df1(0x1e7)](edge);
+  graph[_0x450df1(0x105)]['deleteNode'](_0x450091[_0x450df1(0xe4)]), configuration_space['removeStates'](_0x450091[_0x450df1(0xe4)]), parameters[_0x450df1(0x17b)] = _0x450df1(0x244), updateURL();
+} function addEdge(_0x3ab637, _0x382586) {
+  const _0x2f1c0d = a0_0x5310b3;
+  let _0x297230 = [_0x3ab637['label'], _0x382586['label']];
+  graph[_0x2f1c0d(0x222)][_0x2f1c0d(0x12b)](_0x297230), graph[_0x2f1c0d(0x105)]['addEdge'](_0x297230, _0x3ab637, _0x382586), configuration_space[_0x2f1c0d(0x280)](_0x297230), parameters['graphType'] = _0x2f1c0d(0x244), updateURL();
+} function mouseWheel(_0x2057d4) {
+  const _0x1f2b70 = a0_0x5310b3;
+  areWeOnTheLeft ? parameters['syncView'] && configuration_space['graphLayout'][_0x1f2b70(0x141)][_0x1f2b70(0xff)]['setState'](graph[_0x1f2b70(0x105)][_0x1f2b70(0x141)][_0x1f2b70(0xff)]['getState']()) : parameters['syncView'] && graph['graphLayout']['graphics'][_0x1f2b70(0xff)][_0x1f2b70(0xbf)](configuration_space[_0x1f2b70(0x105)][_0x1f2b70(0x141)][_0x1f2b70(0xff)][_0x1f2b70(0x22e)]());
+} let mouseIsPressedOnLeftSide = !0x1;
+function mousePressedOnLeft(_0x40604e) {
+  const _0x2afd67 = a0_0x5310b3;
+  console[_0x2afd67(0x1e3)](_0x2afd67(0xe6));
+} function mousePressed(_0x4aaba4) {
+  const _0x5ea679 = a0_0x5310b3;
+  if (areWeOnTheLeft = _0x4aaba4[_0x5ea679(0x1b2)] === graphicsForGraph[_0x5ea679(0x1ea)], verbose && console[_0x5ea679(0x1e3)]('mouse\x20pressed'), verbose && console['log'](areWeOnTheLeft), verbose && console[_0x5ea679(0x1e3)](parameters[_0x5ea679(0xe9)]), _0x5ea679(0x22a) === parameters['mode'] || _0x5ea679(0x1d4) === parameters[_0x5ea679(0xe9)]) {
+    if (_0x5ea679(0x22a) === parameters[_0x5ea679(0xe9)]) {
+      let _0x415da6, _0x4dd67b, _0x208c0f = areWeOnTheLeft ? graphicsForGraph : graphicsForConfigurationSpace, _0x141e87 = mouseX - _0x208c0f[_0x5ea679(0xff)]['viewport'][0x0] - _0x208c0f[_0x5ea679(0xff)][_0x5ea679(0x118)][0x2] / 0x2, _0x390922 = mouseY - _0x208c0f[_0x5ea679(0xff)]['viewport'][0x1] - _0x208c0f[_0x5ea679(0xff)][_0x5ea679(0x118)][0x3] / 0x2, _0x9fc1dc = createVector(_0x141e87, _0x390922), _0x22e551 = _0x208c0f[_0x5ea679(0xff)]['getUpVector']();
+      if (cameraState = _0x208c0f['easycam'][_0x5ea679(0x22e)](), _0x5ea679(0x22a) === parameters[_0x5ea679(0xe9)]) {
+        {
+          let _0x59e389 = createVector(_0x22e551[0x0], _0x22e551[0x1], _0x22e551[0x2])[_0x5ea679(0x169)](0.5 * parameters[_0x5ea679(0x28b)]), _0x43bc5e = graph[_0x5ea679(0x22b)], _0xeac343 = graph[_0x5ea679(0x213)];
+          _0x43bc5e[_0x5ea679(0xc1)] = !0x1, _0xeac343[_0x5ea679(0xc1)] = !0x1;
+          let _0x4a8193 = _0x43bc5e[_0x5ea679(0x1a4)](), _0x179ee4 = _0xeac343[_0x5ea679(0x1a4)](), _0x141383 = _0x208c0f[_0x5ea679(0x286)](_0x4a8193), _0x4a9dc4 = _0x208c0f[_0x5ea679(0x286)](_0x179ee4), _0x312a7f = _0x9fc1dc[_0x5ea679(0x157)](_0x141383), _0x1ad11a = _0x9fc1dc[_0x5ea679(0x157)](_0x4a9dc4), _0x41fc03 = _0x208c0f[_0x5ea679(0x286)](p5[_0x5ea679(0x1f6)]['add'](_0x4a8193, _0x59e389)), _0x56cefc = _0x208c0f[_0x5ea679(0x286)](p5[_0x5ea679(0x1f6)]['add'](_0x179ee4, _0x59e389)), _0x213b65 = _0x141383[_0x5ea679(0x157)](_0x41fc03), _0x25a9fc = _0x4a9dc4['dist'](_0x56cefc);
+          _0x312a7f < _0x213b65 ? _0x415da6 = _0x43bc5e : _0x1ad11a < _0x25a9fc && (_0x415da6 = _0xeac343);
+        } {
+          let _0x27a3ce = createVector(_0x22e551[0x0], _0x22e551[0x1], _0x22e551[0x2])[_0x5ea679(0x169)](0.5 * parameters['configNodeSize']), _0x1e40df = configuration_space[_0x5ea679(0x105)]['configuration'];
+          _0x1e40df['active'] = !0x1;
+          let _0x310019 = _0x208c0f['screenPosition'](_0x1e40df[_0x5ea679(0x273)]), _0x304406 = _0x9fc1dc[_0x5ea679(0x157)](_0x310019), _0x5a377e = _0x208c0f['screenPosition'](p5[_0x5ea679(0x1f6)]['add'](_0x1e40df[_0x5ea679(0x273)], _0x27a3ce));
+          _0x304406 < _0x310019[_0x5ea679(0x157)](_0x5a377e) && (_0x415da6 = _0x1e40df);
+        }
+      } if (void 0x0 === _0x415da6) {
+        let _0x3033ce = createVector(_0x22e551[0x0], _0x22e551[0x1], _0x22e551[0x2])[_0x5ea679(0x169)](0.5 * parameters[_0x5ea679(0x16b)]), _0xac2aa6 = [][_0x5ea679(0x1a6)](graph[_0x5ea679(0x105)]['nodes'])[_0x5ea679(0x1a6)](configuration_space[_0x5ea679(0x105)][_0x5ea679(0x1d1)]);
+        for (let _0x469a3c of _0xac2aa6) _0x469a3c[_0x5ea679(0xfa)] = !0x1;
+        for (let _0x20c189 of _0xac2aa6) {
+          _0x20c189[_0x5ea679(0xc1)] = !0x1;
+          let _0x5166d0 = _0x208c0f[_0x5ea679(0x286)](_0x20c189['position']), _0x4d8962 = _0x9fc1dc['dist'](_0x5166d0), _0xcb65ff = _0x208c0f[_0x5ea679(0x286)](p5['Vector'][_0x5ea679(0xc5)](_0x20c189[_0x5ea679(0x273)], _0x3033ce)), _0x4b19aa = _0x5166d0[_0x5ea679(0x157)](_0xcb65ff);
+          verbose && print(_0x208c0f[_0x5ea679(0x286)](_0x20c189[_0x5ea679(0x273)])), _0x4d8962 < _0x4b19aa && (void 0x0 === _0x415da6 || _0x4d8962 < _0x4dd67b) && (_0x415da6 = _0x20c189, _0x4dd67b = _0x4d8962);
+        }
+      } if (void 0x0 !== _0x415da6) _0x415da6['lastSelected'] = !0x0, _0x5ea679(0x1d4) === parameters[_0x5ea679(0xe9)] ? void 0x0 !== nodeSelectedForEdgeAddition ? (nodeSelectedForEdgeAddition !== _0x415da6 && void 0x0 === graph['graphLayout'][_0x5ea679(0x128)](nodeSelectedForEdgeAddition[_0x5ea679(0xe4)], _0x415da6[_0x5ea679(0xe4)], !0x1) && addEdge(nodeSelectedForEdgeAddition, _0x415da6), nodeSelectedForEdgeAddition['firstNodeOfEdge'] = !0x1, nodeSelectedForEdgeAddition = void 0x0) : deleteNodeMode ? _0x415da6[_0x5ea679(0x248)]() || deleteNode(_0x415da6) : (nodeSelectedForEdgeAddition = _0x415da6, _0x415da6['firstNodeOfEdge'] = !0x0) : _0x5ea679(0x22a) === parameters['mode'] && (_0x415da6[_0x5ea679(0xc1)] = !0x0, verbose && console[_0x5ea679(0x1e3)](_0x5ea679(0x234)));
+      else {
+        if (_0x5ea679(0x1d4) === parameters[_0x5ea679(0xe9)]) {
+          let _0x18dc99 = addNode(), _0x2772d1 = areWeOnTheLeft ? graphicsForGraph : graphicsForConfigurationSpace, _0x3ea462 = mouseX - _0x2772d1[_0x5ea679(0xff)][_0x5ea679(0x118)][0x0] - _0x2772d1[_0x5ea679(0xff)][_0x5ea679(0x118)][0x2] / 0x2, _0xfc428e = mouseY - _0x2772d1[_0x5ea679(0xff)][_0x5ea679(0x118)][0x1] - _0x2772d1[_0x5ea679(0xff)][_0x5ea679(0x118)][0x3] / 0x2, _0x7b4e7c = createVector(_0x3ea462, _0xfc428e);
+          for (let _0xf68050 = 0x0;
+            _0xf68050 < 0xa;
+            _0xf68050++) {
+              let _0x9b711b = _0x2772d1[_0x5ea679(0x286)](_0x18dc99[_0x5ea679(0x273)]), _0x48668c = p5[_0x5ea679(0x1f6)][_0x5ea679(0xe5)](_0x7b4e7c, _0x9b711b), _0x4454e5 = applyToVec3(cameraState[_0x5ea679(0x172)], [_0x48668c['x'], _0x48668c['y'], 0x0]), _0x19e669 = _0x4454e5[0x0], _0xc0cfda = _0x4454e5[0x1], _0x4eebac = _0x4454e5[0x2], _0x324bff = createVector(_0x19e669, _0xc0cfda, _0x4eebac)[_0x5ea679(0x169)](0.5 * _0x48668c[_0x5ea679(0x1fa)]());
+            _0x18dc99['position'][_0x5ea679(0xc5)](_0x324bff);
+          }
+        }
+      }
+    } if (!0x0 === graph['robotA'][_0x5ea679(0xc1)] || !0x0 === graph[_0x5ea679(0x213)]['active']) {
+      let _0x2bd72c = !0x0 === graph[_0x5ea679(0x22b)][_0x5ea679(0xc1)] ? graph[_0x5ea679(0x22b)] : graph[_0x5ea679(0x213)], _0x456697 = _0x2bd72c[_0x5ea679(0x230)]();
+      for (let _0xc57166 of _0x456697) graph[_0x5ea679(0x105)][_0x5ea679(0x128)](_0xc57166[0x0], _0xc57166[0x1])['candidateForRobot'] = _0x2bd72c[_0x5ea679(0x258)];
+    }
+  } else _0x5ea679(0x10a) === parameters['mode'] && reheat();
+} function ourMouseDragged() {
+  const _0x88b379 = a0_0x5310b3;
+  if (verbose && console[_0x88b379(0x1e3)](_0x88b379(0x240)), _0x88b379(0x22a) === parameters[_0x88b379(0xe9)]) {
+    reheat();
+    let _0x216deb, _0x689adf, _0x5e054f = areWeOnTheLeft ? graphicsForGraph : graphicsForConfigurationSpace, _0x1d431d = mouseX - _0x5e054f[_0x88b379(0xff)]['viewport'][0x0] - _0x5e054f[_0x88b379(0xff)][_0x88b379(0x118)][0x2] / 0x2, _0x1588ea = mouseY - _0x5e054f[_0x88b379(0xff)]['viewport'][0x1] - _0x5e054f['easycam'][_0x88b379(0x118)][0x3] / 0x2, _0x5e105f = createVector(_0x1d431d, _0x1588ea);
+    if (!0x0 === graph[_0x88b379(0x22b)][_0x88b379(0xc1)] || !0x0 === graph[_0x88b379(0x213)]['active']) {
+      let _0x303397 = !0x0 === graph[_0x88b379(0x22b)][_0x88b379(0xc1)] ? graph[_0x88b379(0x22b)] : graph['robotB'];
+      if (_0x303397[_0x88b379(0x1f5)]()) {
+        let _0x268b6f, _0x4ab2dc, _0x17d92d = _0x5e054f[_0x88b379(0x286)](_0x303397[_0x88b379(0x1a4)]()), _0x4ef8ba = p5[_0x88b379(0x1f6)][_0x88b379(0xe5)](_0x5e105f, _0x17d92d), _0x3c79cd = _0x303397[_0x88b379(0x261)]();
+        for (let _0x24859f of _0x3c79cd) {
+          let _0x168cd3 = _0x5e054f[_0x88b379(0x286)](_0x24859f['position']), _0x5056a5 = p5['Vector'][_0x88b379(0xe5)](_0x168cd3, _0x17d92d), _0x1ac349 = p5[_0x88b379(0x1f6)]['dot'](_0x5056a5, _0x4ef8ba) / (_0x4ef8ba['mag']() * _0x5056a5['mag']());
+          _0x5056a5['dot'](_0x4ef8ba) / pow(_0x5056a5[_0x88b379(0x1fa)](), 0x2) > 0.05 && (void 0x0 === _0x268b6f || _0x1ac349 > _0x4ab2dc) && (_0x268b6f = _0x24859f, _0x4ab2dc = _0x1ac349);
+        } void 0x0 !== _0x268b6f && _0x303397[_0x88b379(0x238)](_0x268b6f);
+      } else {
+        let _0x134196 = _0x5e054f[_0x88b379(0x286)](_0x303397['getPosition']()), _0x5b1a38 = p5[_0x88b379(0x1f6)][_0x88b379(0xe5)](_0x5e105f, _0x134196)['mult'](0.9), _0xea3b5d = _0x5e054f[_0x88b379(0x286)](_0x303397[_0x88b379(0xd3)][_0x88b379(0x273)]), _0x10758e = _0x5e054f[_0x88b379(0x286)](_0x303397[_0x88b379(0x1ee)]['position']), _0x2fc4cf = p5[_0x88b379(0x1f6)][_0x88b379(0xe5)](_0x10758e, _0xea3b5d), _0x4a3c83 = _0x2fc4cf[_0x88b379(0x196)](_0x5b1a38) / pow(_0x2fc4cf[_0x88b379(0x1fa)](), 0x2);
+        _0x303397[_0x88b379(0x200)](_0x303397[_0x88b379(0x1ce)] + _0x4a3c83);
+      }
+    } else {
+      verbose && console[_0x88b379(0x1e3)](_0x88b379(0x20f));
+      for (let _0xf3f115 of graph[_0x88b379(0x105)][_0x88b379(0x1d1)]) !0x0 === _0xf3f115[_0x88b379(0xc1)] && (_0x689adf = _0xf3f115, verbose && console[_0x88b379(0x1e3)](_0x88b379(0x229)), verbose && console[_0x88b379(0x1e3)](_0xf3f115));
+    } if (!0x0 === configuration_space[_0x88b379(0x105)][_0x88b379(0x23a)]['active']) {
+      _0x216deb = configuration_space[_0x88b379(0x105)][_0x88b379(0x23a)];
+      let _0x5274af = graphicsForConfigurationSpace['screenPosition'](_0x216deb['position']), _0x3a2ef1 = p5[_0x88b379(0x1f6)][_0x88b379(0xe5)](_0x5e105f, _0x5274af)[_0x88b379(0x1aa)](0.9), _0x2ff081 = configuration_space['graphLayout']['getNode']([_0x216deb[_0x88b379(0x22b)][_0x88b379(0xd3)][_0x88b379(0xe4)], _0x216deb[_0x88b379(0x213)]['nodeFrom'][_0x88b379(0xe4)]])[_0x88b379(0x273)], _0x19ca56 = configuration_space[_0x88b379(0x105)][_0x88b379(0x14c)]([_0x216deb[_0x88b379(0x22b)]['nodeTo'][_0x88b379(0xe4)], _0x216deb[_0x88b379(0x213)][_0x88b379(0xd3)][_0x88b379(0xe4)]])[_0x88b379(0x273)], _0x1f2687 = configuration_space[_0x88b379(0x105)][_0x88b379(0x14c)]([_0x216deb[_0x88b379(0x22b)][_0x88b379(0xd3)][_0x88b379(0xe4)], _0x216deb[_0x88b379(0x213)][_0x88b379(0x1ee)]['label']])[_0x88b379(0x273)], _0x2138f3 = configuration_space[_0x88b379(0x105)][_0x88b379(0x14c)]([_0x216deb[_0x88b379(0x22b)][_0x88b379(0x1ee)][_0x88b379(0xe4)], _0x216deb[_0x88b379(0x213)]['nodeTo'][_0x88b379(0xe4)]])[_0x88b379(0x273)];
+      if (flags[SHIFT] || flags[0x42]) {
+        if (_0x216deb[_0x88b379(0x213)][_0x88b379(0x1f5)]()) {
+          let _0x507bb4 = pickBestCandidateForB(_0x216deb, _0x3a2ef1);
+          void 0x0 !== _0x507bb4 && _0x216deb['robotB']['setNeighbor'](_0x507bb4);
+        } else {
+          let _0x7e1d0f = p5[_0x88b379(0x1f6)]['lerp'](_0x2ff081, _0x19ca56, _0x216deb[_0x88b379(0x22b)]['amount']), _0x388525 = p5['Vector'][_0x88b379(0xd4)](_0x1f2687, _0x2138f3, _0x216deb[_0x88b379(0x22b)][_0x88b379(0x1ce)]), _0x176bd7 = graphicsForConfigurationSpace[_0x88b379(0x286)](_0x7e1d0f), _0x286baf = graphicsForConfigurationSpace[_0x88b379(0x286)](_0x388525), _0x11aa41 = p5[_0x88b379(0x1f6)][_0x88b379(0xe5)](_0x286baf, _0x176bd7), _0xd9764b = _0x11aa41[_0x88b379(0x196)](_0x3a2ef1) / pow(_0x11aa41[_0x88b379(0x1fa)](), 0x2);
+          _0x216deb[_0x88b379(0x213)][_0x88b379(0x200)](_0x216deb['robotB'][_0x88b379(0x1ce)] + _0xd9764b);
+        }
+      } if (flags[SHIFT] || flags[0x41]) {
+        if (_0x216deb[_0x88b379(0x22b)][_0x88b379(0x1f5)]()) {
+          let _0x247741 = pickBestCandidateForA(_0x216deb, _0x3a2ef1);
+          void 0x0 !== _0x247741 && _0x216deb[_0x88b379(0x22b)]['setNeighbor'](_0x247741);
+        } else {
+          let _0x33d58e = p5[_0x88b379(0x1f6)][_0x88b379(0xd4)](_0x2ff081, _0x1f2687, _0x216deb[_0x88b379(0x213)][_0x88b379(0x1ce)]), _0x33c52c = p5[_0x88b379(0x1f6)][_0x88b379(0xd4)](_0x19ca56, _0x2138f3, _0x216deb['robotB'][_0x88b379(0x1ce)]), _0x222870 = graphicsForConfigurationSpace[_0x88b379(0x286)](_0x33d58e), _0x5c9a80 = graphicsForConfigurationSpace[_0x88b379(0x286)](_0x33c52c), _0x50c709 = p5['Vector'][_0x88b379(0xe5)](_0x5c9a80, _0x222870), _0x52b81f = _0x50c709[_0x88b379(0x196)](_0x3a2ef1) / pow(_0x50c709[_0x88b379(0x1fa)](), 0x2);
+          _0x216deb['robotA'][_0x88b379(0x200)](_0x216deb['robotA']['amount'] + _0x52b81f);
+        }
+      }
+    } else {
+      for (let _0x588de4 of configuration_space['graphLayout'][_0x88b379(0x1d1)]) !0x0 === _0x588de4[_0x88b379(0xc1)] && (_0x689adf = _0x588de4);
+    } if (void 0x0 !== _0x689adf) {
+      verbose && console[_0x88b379(0x1e3)]('moving\x20ordinaryNodeMoving');
+      let _0x45139c = _0x5e054f['screenPosition'](_0x689adf[_0x88b379(0x273)]), _0x3ee64c = p5['Vector'][_0x88b379(0xe5)](_0x5e105f, _0x45139c), _0x3683fc = applyToVec3(cameraState[_0x88b379(0x172)], [_0x3ee64c['x'], _0x3ee64c['y'], 0x0]), _0xd35313 = _0x5e054f['easycam'][_0x88b379(0x1a4)](), _0x411949 = createVector(_0xd35313[0x0], _0xd35313[0x1], _0xd35313[0x2]), _0x399cde = _0x689adf[_0x88b379(0x273)][_0x88b379(0x157)](_0x411949);
+      verbose && print(_0x3683fc);
+      let _0x5d0dfa = _0x3683fc[0x0], _0x210d3e = _0x3683fc[0x1], _0x56e519 = _0x3683fc[0x2], _0x818bc6 = createVector(_0x5d0dfa, _0x210d3e, _0x56e519)[_0x88b379(0x1aa)](0.5 * _0x399cde / cameraState[_0x88b379(0x205)]);
+      _0x689adf[_0x88b379(0x273)][_0x88b379(0xc5)](_0x818bc6);
+    }
+  } else _0x88b379(0x10a) === parameters[_0x88b379(0xe9)] && (areWeOnTheLeft ? parameters[_0x88b379(0x24a)] && configuration_space['graphLayout'][_0x88b379(0x141)]['easycam'][_0x88b379(0xbf)](graph['graphLayout'][_0x88b379(0x141)][_0x88b379(0xff)]['getState']()) : parameters[_0x88b379(0x24a)] && graph[_0x88b379(0x105)][_0x88b379(0x141)][_0x88b379(0xff)][_0x88b379(0xbf)](configuration_space[_0x88b379(0x105)][_0x88b379(0x141)][_0x88b379(0xff)]['getState']()), reheat());
+} function pickBestCandidateForA(_0xc31953, _0x34b6eb) {
+  const _0xffd260 = a0_0x5310b3;
+  let _0x5cabcb, _0x325233 = _0xc31953[_0xffd260(0x22b)]['getCandidates'](), _0x1b4f97 = PI / 0x2;
+  for (let _0x2dc5ca of _0x325233) {
+    let _0x280e62 = configuration_space['graphLayout'][_0xffd260(0x14c)]([_0x2dc5ca[_0xffd260(0xe4)], _0xc31953[_0xffd260(0x213)][_0xffd260(0xd3)][_0xffd260(0xe4)]])['position'], _0x1dc420 = configuration_space[_0xffd260(0x105)][_0xffd260(0x14c)]([_0x2dc5ca[_0xffd260(0xe4)], _0xc31953[_0xffd260(0x213)][_0xffd260(0x1ee)][_0xffd260(0xe4)]])[_0xffd260(0x273)], _0x40e21d = _0xc31953[_0xffd260(0x273)], _0x5143ee = p5['Vector'][_0xffd260(0xd4)](_0x280e62, _0x1dc420, _0xc31953[_0xffd260(0x213)][_0xffd260(0x1ce)]), _0x497de6 = graphicsForConfigurationSpace[_0xffd260(0x286)](_0x40e21d), _0x4acc03 = graphicsForConfigurationSpace[_0xffd260(0x286)](_0x5143ee), _0x4c4267 = p5[_0xffd260(0x1f6)]['sub'](_0x4acc03, _0x497de6), _0x43028a = abs(_0x34b6eb[_0xffd260(0xe1)](_0x4c4267));
+    _0x43028a < _0x1b4f97 && (_0x5cabcb = _0x2dc5ca, _0x1b4f97 = _0x43028a);
+  } return _0x5cabcb;
+} function pickBestCandidateForB(_0x14a0cf, _0x127c5d) {
+  const _0x44fa6f = a0_0x5310b3;
+  let _0x3ab503, _0x2dd16c = _0x14a0cf['robotB'][_0x44fa6f(0x261)](), _0x3af70c = PI / 0x2;
+  for (let _0x24bf03 of _0x2dd16c) {
+    let _0x568f33 = configuration_space[_0x44fa6f(0x105)][_0x44fa6f(0x14c)]([_0x14a0cf['robotA'][_0x44fa6f(0xd3)][_0x44fa6f(0xe4)], _0x24bf03[_0x44fa6f(0xe4)]])['position'], _0x416f0f = configuration_space[_0x44fa6f(0x105)][_0x44fa6f(0x14c)]([_0x14a0cf[_0x44fa6f(0x22b)][_0x44fa6f(0x1ee)]['label'], _0x24bf03[_0x44fa6f(0xe4)]])[_0x44fa6f(0x273)], _0x4222ca = _0x14a0cf[_0x44fa6f(0x273)], _0x17948c = p5[_0x44fa6f(0x1f6)][_0x44fa6f(0xd4)](_0x568f33, _0x416f0f, _0x14a0cf[_0x44fa6f(0x22b)]['amount']), _0x4855b9 = graphicsForConfigurationSpace[_0x44fa6f(0x286)](_0x4222ca), _0x4751bd = graphicsForConfigurationSpace['screenPosition'](_0x17948c), _0x4dcd75 = p5[_0x44fa6f(0x1f6)]['sub'](_0x4751bd, _0x4855b9), _0x16b367 = abs(_0x127c5d[_0x44fa6f(0xe1)](_0x4dcd75));
+    _0x16b367 < _0x3af70c && (_0x3ab503 = _0x24bf03, _0x3af70c = _0x16b367);
+  } return _0x3ab503;
+} function mouseReleased() {
+  const _0x25bfff = a0_0x5310b3;
+  configuration_space['graphLayout'][_0x25bfff(0x23a)]['active'] = !0x1;
+  for (let _0x2fd4c6 of configuration_space[_0x25bfff(0x105)]['nodes']) _0x2fd4c6[_0x25bfff(0xc1)] = !0x1;
+  graph[_0x25bfff(0x22b)]['active'] = !0x1, graph[_0x25bfff(0x213)]['active'] = !0x1;
+  for (let _0x4a283f of graph[_0x25bfff(0x105)][_0x25bfff(0x1d1)]) _0x4a283f[_0x25bfff(0xc1)] = !0x1;
+  if ('a' !== key && 'b' !== key) {
+    for (let _0x5d7923 of graph[_0x25bfff(0x105)]['edges']) _0x5d7923['candidateForRobot'] = void 0x0;
+  }
+} function easyCamOff() {
+  const _0x15ac9a = a0_0x5310b3;
+  easyCamActive = !0x1, graphicsForConfigurationSpace[_0x15ac9a(0xff)][_0x15ac9a(0x17e)](), graphicsForGraph[_0x15ac9a(0xff)][_0x15ac9a(0x17e)](), forcesActive = !0x1, configuration_space['graphLayout'][_0x15ac9a(0x152)] = !0x1, graph[_0x15ac9a(0x105)]['moveToCenter'] = !0x1;
+} function easyCamOn() {
+  const _0x511233 = a0_0x5310b3;
+  easyCamActive = !0x0, verbose && print(_0x511233(0x27a)), graphicsForConfigurationSpace[_0x511233(0xff)]['attachMouseListeners'](graphicsForConfigurationSpace[_0x511233(0x19a)]), graphicsForGraph[_0x511233(0xff)][_0x511233(0x28d)](graphicsForGraph[_0x511233(0x19a)]), forcesActive = !0x0, configuration_space[_0x511233(0x105)][_0x511233(0x152)] = !0x0, graph[_0x511233(0x105)]['moveToCenter'] = !0x0;
+} let flags = {};
+function downKey(_0x57befd) {
+  return flags[_0x57befd['charCodeAt'](0x0)];
+} function keyPressed() {
+  const _0xd86c4d = a0_0x5310b3;
+  if (flags[keyCode] = !0x0, keyCode !== SHIFT && 'a' !== key && 'b' !== key || (parameters[_0xd86c4d(0xe9)] = _0xd86c4d(0x22a), updateMode()), 'a' === key && !downKey('B') || 'b' === key && !downKey('A')) {
+    let _0x561592 = 'a' === key ? graph[_0xd86c4d(0x22b)] : graph[_0xd86c4d(0x213)], _0x3a25c5 = _0x561592[_0xd86c4d(0x230)]();
+    for (let _0x3fe8fd of _0x3a25c5) graph[_0xd86c4d(0x105)]['getEdge'](_0x3fe8fd[0x0], _0x3fe8fd[0x1])[_0xd86c4d(0x1a0)] = _0x561592['index'];
+  } 'R' === key ? init() : 'e' === key ? (parameters['mode'] = _0xd86c4d(0x1d4), updateMode()) : '\x20' === key ? running = !running : 'f' === key ? forcesActive = !forcesActive : 'q' === key ? parameters[_0xd86c4d(0xc8)] = !parameters['debugMode'] : 't' === key ? parameters[_0xd86c4d(0x225)] = !parameters[_0xd86c4d(0x225)] : 'g' === key ? toggleGUI(-0x1) : '0' === key ? toggleGUI(0x0) : '1' === key ? toggleGUI(0x1) : '2' === key ? toggleGUI(0x2) : '3' === key ? toggleGUI(0x3) : 'n' === key ? addNode() : 'd' === key ? deleteNodeMode = !deleteNodeMode : 'a' === key ? robotAmoving = !robotAmoving : 'b' === key ? robotBmoving = !robotBmoving : 'c' === key ? toggleForSelectedNode() : 's' === key ? takeScreenshotGraph = !takeScreenshotGraph : 'S' === key ? takeScreenshotConfigSpace = !takeScreenshotConfigSpace : 'w' === key ? writeToFiles() : 'l' === key ? readLayoutFromFile('layout.txt') : 'r' === key ? readFromFile('graph.txt') : '+' === key ? readHomology() : 'm' === key ? (graphicsForConfigurationSpace[_0xd86c4d(0xff)][_0xd86c4d(0x17e)](), graphicsForGraph[_0xd86c4d(0xff)][_0xd86c4d(0x17e)]()) : 'M' === key && (graphicsForConfigurationSpace[_0xd86c4d(0xff)][_0xd86c4d(0x28d)](graphicsForConfigurationSpace[_0xd86c4d(0x19a)]), graphicsForGraph[_0xd86c4d(0xff)][_0xd86c4d(0x28d)](graphicsForGraph[_0xd86c4d(0x19a)])), tweakpane[_0xd86c4d(0x287)]();
+} function keyReleased() {
+  const _0x503da8 = a0_0x5310b3;
+  if (flags[keyCode] = !0x1, keyCode !== SHIFT && 'a' !== key && 'b' !== key || (parameters['mode'] = _0x503da8(0x10a), updateMode()), !downKey('A') && !downKey('B')) {
+    for (let _0x442f70 of graph[_0x503da8(0x105)][_0x503da8(0x222)]) _0x442f70[_0x503da8(0x1a0)] = void 0x0;
+  }
+} function applyToVec3(_0x47a586, _0x14fcfc) {
+  let _0x48308e;
+  var [_0x24677b, _0x3e97ef, _0x53802c] = _0x14fcfc, [_0x141a19, _0x54ad87, _0x5c8f31, _0x2e89d2] = _0x47a586, _0x2e075e = _0x54ad87 * _0x24677b + _0x5c8f31 * _0x3e97ef + _0x2e89d2 * _0x53802c;
+  return _0x48308e = [0x0, 0x0, 0x0], _0x48308e[0x0] = 0x2 * (_0x141a19 * (_0x24677b * _0x141a19 - (_0x5c8f31 * _0x53802c - _0x2e89d2 * _0x3e97ef)) + _0x2e075e * _0x54ad87) - _0x24677b, _0x48308e[0x1] = 0x2 * (_0x141a19 * (_0x3e97ef * _0x141a19 - (_0x2e89d2 * _0x24677b - _0x54ad87 * _0x53802c)) + _0x2e075e * _0x5c8f31) - _0x3e97ef, _0x48308e[0x2] = 0x2 * (_0x141a19 * (_0x53802c * _0x141a19 - (_0x54ad87 * _0x3e97ef - _0x5c8f31 * _0x24677b)) + _0x2e075e * _0x2e89d2) - _0x53802c, _0x48308e;
+} function limitVector(_0x16af54, _0x344e44) {
+  const _0x8a52b5 = a0_0x5310b3;
+  _0x16af54[_0x8a52b5(0x1fa)]() > _0x344e44 && _0x16af54['normalize']()[_0x8a52b5(0x1aa)](_0x344e44);
+} function EulerToQuaternion(_0xadb7c8, _0x2ced2a, _0x5db086) {
+  var _0x570d2c = cos(0.5 * _0x5db086), _0x36ac98 = sin(0.5 * _0x5db086), _0x5cb7f2 = cos(0.5 * _0x2ced2a), _0x5690cb = sin(0.5 * _0x2ced2a), _0x1edf04 = cos(0.5 * _0xadb7c8), _0x492a33 = sin(0.5 * _0xadb7c8);
+  return [_0x570d2c * _0x5cb7f2 * _0x1edf04 + _0x36ac98 * _0x5690cb * _0x492a33, _0x570d2c * _0x5cb7f2 * _0x492a33 - _0x36ac98 * _0x5690cb * _0x1edf04, _0x36ac98 * _0x5cb7f2 * _0x492a33 + _0x570d2c * _0x5690cb * _0x1edf04, _0x36ac98 * _0x5cb7f2 * _0x1edf04 - _0x570d2c * _0x5690cb * _0x492a33];
+} function QuaternionToEuler(_0x58c3ff, _0x1834bf, _0x30d0c6, _0x4f69b6) {
+  var _0x1fd4cb = 0x2 * (_0x58c3ff * _0x30d0c6 - _0x4f69b6 * _0x1834bf);
+  return [atan2(0x2 * (_0x58c3ff * _0x1834bf + _0x30d0c6 * _0x4f69b6), 0x1 - 0x2 * (_0x1834bf * _0x1834bf + _0x30d0c6 * _0x30d0c6)), abs(_0x1fd4cb) >= 0x1 ? copysign(M_PI / 0x2, _0x1fd4cb) : asin(_0x1fd4cb), atan2(0x2 * (_0x58c3ff * _0x4f69b6 + _0x1834bf * _0x30d0c6), 0x1 - 0x2 * (_0x30d0c6 * _0x30d0c6 + _0x4f69b6 * _0x4f69b6))];
+} function cartesianProductOf() {
+  const _0x4c4650 = a0_0x5310b3;
+  return Array['prototype'][_0x4c4650(0x1f1)][_0x4c4650(0x22f)](arguments, function (_0x91c0fc, _0x4bd03f) {
+    var _0x1aac72 = [];
+    return _0x91c0fc['forEach'](function (_0x12677d) {
+      const _0x10cc96 = a0_0x96fc;
+      _0x4bd03f[_0x10cc96(0x295)](function (_0x45e9ec) {
+        const _0x50b68c = _0x10cc96;
+        _0x1aac72[_0x50b68c(0x12b)](_0x12677d[_0x50b68c(0x1a6)]([_0x45e9ec]));
+      });
+    }), _0x1aac72;
+  }, [[]]);
+} function labelToString(_0x13d5c3) {
+  const _0xb4db91 = a0_0x5310b3;
+  let _0x3966df = '';
+  if (Array[_0xb4db91(0xed)](_0x13d5c3)) {
+    for (let _0x1f7108 of _0x13d5c3) _0x3966df += _0x1f7108 + '\x20';
+    return _0x3966df = _0x3966df[_0xb4db91(0x1c5)](0x0, -0x1), _0x3966df;
+  } return _0x13d5c3;
+} function checkIfArrayIsUnique(_0x38a9a5) {
+  const _0x4e7330 = a0_0x5310b3;
+  return _0x38a9a5[_0x4e7330(0x147)] === new Set(_0x38a9a5)[_0x4e7330(0x13b)];
+} const flatten = _0x3d045d => [][a0_0x5310b3(0x1a6)][a0_0x5310b3(0x266)]([], _0x3d045d), product = (..._0x326017) => _0x326017[a0_0x5310b3(0x1f1)]((_0x3f3295, _0x1de9b4) => flatten(_0x3f3295['map'](_0x3511f8 => _0x1de9b4[a0_0x5310b3(0xab)](_0x4a4dbf => [..._0x3511f8, _0x4a4dbf]))), [[]]);
+function arraysEqual(_0x20d69b, _0x21cfa6) {
+  const _0x4f18ec = a0_0x5310b3;
+  return JSON[_0x4f18ec(0x254)](_0x20d69b) == JSON['stringify'](_0x21cfa6);
+} function edgesContainEdge(_0x2ba6b7, _0x593e30) {
+  for (let _0x480bc1 of _0x2ba6b7) {
+    if (arraysEqual(_0x480bc1, _0x593e30)) return !0x0;
+    if (arraysEqual(_0x480bc1, [_0x593e30[0x1], _0x593e30[0x0]])) return !0x0;
+  } return !0x1;
+} function is_state(_0x43d67f) {
+  const _0x4f37c3 = a0_0x5310b3;
+  return checkIfArrayIsUnique(_0x43d67f[_0x4f37c3(0x1ca)]());
+} function toggleForSelectedNode() {
+  const _0x53e508 = a0_0x5310b3;
+  console[_0x53e508(0x1e3)]('toggleForSelectedNode');
+  for (let _0x45184f of graph[_0x53e508(0x105)]['nodes']) !0x0 === _0x45184f[_0x53e508(0xfa)] && (_0x45184f[_0x53e508(0x293)] = !_0x45184f['applyExtraCenterForce'], verbose || print(_0x45184f[_0x53e508(0x293)]));
+  for (let _0x566f91 of configuration_space[_0x53e508(0x105)][_0x53e508(0x1d1)]) !0x0 === _0x566f91[_0x53e508(0xfa)] && (_0x566f91['applyExtraCenterForce'] = !_0x566f91['applyExtraCenterForce'], verbose || print(_0x566f91[_0x53e508(0x293)]));
+} function toggleGUI(_0x3dbf1b) {
+  const _0x2c9b24 = a0_0x5310b3;
+  -0x1 === _0x3dbf1b && (!0x0 === gui[_0x2c9b24(0x1af)] ? gui[_0x2c9b24(0xbb)]() : gui[_0x2c9b24(0x221)]());
+} const THETA = 0.65, MAXLEVEL = 0xa, BUCKETSIZE = 0x3, NODEMASS = 0.8, EMPTY = 0x0, LEAF = 0x1, DIVIDED = 0x2, allNodesForce = -0.33, gravityPower = 0x2;
+class Octree {
+  constructor(_0x5cc96, _0x538766) {
+    const _0x4ca63d = a0_0x5310b3;
+    this[_0x4ca63d(0x1fe)] = _0x5cc96, this['level'] = _0x538766, this[_0x4ca63d(0x272)] = 0x0, this[_0x4ca63d(0x226)] = void 0x0, this[_0x4ca63d(0xe0)] = createVector(), this[_0x4ca63d(0x251)] = 0x0;
+  } [a0_0x5310b3(0xc7)]() {
+    const _0x50bb36 = a0_0x5310b3;
+    this[_0x50bb36(0x272)] = 0x2;
+    let _0x200572 = this[_0x50bb36(0x1fe)]['x'], _0x630dc2 = this[_0x50bb36(0x1fe)]['y'], _0x3b54f0 = this[_0x50bb36(0x1fe)]['z'], _0x32042d = this['boundary']['w'] / 0x2, _0x407bca = this[_0x50bb36(0x1fe)]['h'] / 0x2, _0x4cc808 = this[_0x50bb36(0x1fe)]['d'] / 0x2;
+    this['URF'] = new Octree(new Cube(_0x200572 + _0x32042d, _0x630dc2 - _0x407bca, _0x3b54f0 + _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this[_0x50bb36(0x1e5)] + 0x1), this[_0x50bb36(0x123)] = new Octree(new Cube(_0x200572 - _0x32042d, _0x630dc2 - _0x407bca, _0x3b54f0 + _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this[_0x50bb36(0x1e5)] + 0x1), this['LRF'] = new Octree(new Cube(_0x200572 + _0x32042d, _0x630dc2 + _0x407bca, _0x3b54f0 + _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this['level'] + 0x1), this['LLF'] = new Octree(new Cube(_0x200572 - _0x32042d, _0x630dc2 + _0x407bca, _0x3b54f0 + _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this[_0x50bb36(0x1e5)] + 0x1), this['URB'] = new Octree(new Cube(_0x200572 + _0x32042d, _0x630dc2 - _0x407bca, _0x3b54f0 - _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this['level'] + 0x1), this[_0x50bb36(0xec)] = new Octree(new Cube(_0x200572 - _0x32042d, _0x630dc2 - _0x407bca, _0x3b54f0 - _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this['level'] + 0x1), this[_0x50bb36(0x198)] = new Octree(new Cube(_0x200572 + _0x32042d, _0x630dc2 + _0x407bca, _0x3b54f0 - _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this[_0x50bb36(0x1e5)] + 0x1), this['LLB'] = new Octree(new Cube(_0x200572 - _0x32042d, _0x630dc2 + _0x407bca, _0x3b54f0 - _0x4cc808, _0x32042d, _0x407bca, _0x4cc808), this['level'] + 0x1);
+  } [a0_0x5310b3(0x173)](_0x3f3362) {
+    const _0x300dc9 = a0_0x5310b3;
+    if (0x0 == this[_0x300dc9(0x272)]) null == this['children'] && (this[_0x300dc9(0x226)] = []), this[_0x300dc9(0x226)][_0x300dc9(0x12b)](_0x3f3362), this[_0x300dc9(0x272)] = 0x1;
+    else {
+      if (0x1 == this[_0x300dc9(0x272)]) {
+        if (this[_0x300dc9(0x226)]['length'] < 0x3 || 0xa == this[_0x300dc9(0x1e5)]) this['children'][_0x300dc9(0x12b)](_0x3f3362);
+        else {
+          this[_0x300dc9(0xc7)]();
+          for (let _0x2ae23f of this[_0x300dc9(0x226)]) this[_0x300dc9(0x18f)](_0x2ae23f);
+          this['children'] = [], this[_0x300dc9(0x18f)](_0x3f3362);
+        }
+      } else 0x2 == this[_0x300dc9(0x272)] ? this[_0x300dc9(0x18f)](_0x3f3362) : error(_0x300dc9(0xb2));
+    }
+  } [a0_0x5310b3(0x18f)](_0x169a0c) {
+    const _0x1a2731 = a0_0x5310b3;
+    this[_0x1a2731(0x123)]['boundary'][_0x1a2731(0x10d)](_0x169a0c) ? this[_0x1a2731(0x123)][_0x1a2731(0x173)](_0x169a0c) : this[_0x1a2731(0x162)][_0x1a2731(0x1fe)][_0x1a2731(0x10d)](_0x169a0c) ? this[_0x1a2731(0x162)][_0x1a2731(0x173)](_0x169a0c) : this[_0x1a2731(0x113)][_0x1a2731(0x1fe)][_0x1a2731(0x10d)](_0x169a0c) ? this['LLF']['insert'](_0x169a0c) : this[_0x1a2731(0x1b1)][_0x1a2731(0x1fe)][_0x1a2731(0x10d)](_0x169a0c) ? this['LRF'][_0x1a2731(0x173)](_0x169a0c) : this[_0x1a2731(0xec)][_0x1a2731(0x1fe)][_0x1a2731(0x10d)](_0x169a0c) ? this[_0x1a2731(0xec)][_0x1a2731(0x173)](_0x169a0c) : this['URB'][_0x1a2731(0x1fe)][_0x1a2731(0x10d)](_0x169a0c) ? this[_0x1a2731(0xb8)][_0x1a2731(0x173)](_0x169a0c) : this[_0x1a2731(0x23c)][_0x1a2731(0x1fe)][_0x1a2731(0x10d)](_0x169a0c) ? this[_0x1a2731(0x23c)]['insert'](_0x169a0c) : this[_0x1a2731(0x198)][_0x1a2731(0x1fe)][_0x1a2731(0x10d)](_0x169a0c) ? this['LRB'][_0x1a2731(0x173)](_0x169a0c) : verbose && console[_0x1a2731(0x253)](_0x1a2731(0x242) + _0x169a0c[_0x1a2731(0x273)] + '\x20' + this['boundary'][_0x1a2731(0x24b)]() + _0x1a2731(0x27c) + this[_0x1a2731(0x123)][_0x1a2731(0x1fe)][_0x1a2731(0x24b)]() + _0x1a2731(0x19b) + this[_0x1a2731(0x162)][_0x1a2731(0x1fe)][_0x1a2731(0x24b)]() + '\x0athis.LLF.boundary\x20=\x20' + this['LLF'][_0x1a2731(0x1fe)][_0x1a2731(0x24b)]() + _0x1a2731(0x15d) + this['LRF'][_0x1a2731(0x1fe)][_0x1a2731(0x24b)]() + _0x1a2731(0x1ac) + this[_0x1a2731(0xec)]['boundary'][_0x1a2731(0x24b)]() + _0x1a2731(0xe2) + this[_0x1a2731(0xb8)][_0x1a2731(0x1fe)][_0x1a2731(0x24b)]() + '\x0athis.LLB.boundary\x20=\x20' + this[_0x1a2731(0x23c)][_0x1a2731(0x1fe)][_0x1a2731(0x24b)]() + _0x1a2731(0x20b) + this[_0x1a2731(0x198)][_0x1a2731(0x1fe)][_0x1a2731(0x24b)]() + '\x0a');
+  } [a0_0x5310b3(0x18e)]() {
+    const _0x201cc7 = a0_0x5310b3;
+    if (0x0 == this[_0x201cc7(0x272)]);
+    else {
+      if (0x1 == this[_0x201cc7(0x272)]) {
+        this[_0x201cc7(0xe0)][_0x201cc7(0x210)](0x0, 0x0, 0x0), this[_0x201cc7(0x251)] = 0x0;
+        for (let _0x117b0c of this[_0x201cc7(0x226)]) this['centerOfMass'][_0x201cc7(0xc5)](p5[_0x201cc7(0x1f6)][_0x201cc7(0x1aa)](_0x117b0c[_0x201cc7(0x273)], 0.8)), this[_0x201cc7(0x251)] += 0.8;
+        this[_0x201cc7(0xe0)]['div'](this[_0x201cc7(0x251)]);
+      } else 0x2 == this[_0x201cc7(0x272)] ? (this[_0x201cc7(0xe0)][_0x201cc7(0x210)](0x0, 0x0, 0x0), this['centerMass'] = 0x0, this[_0x201cc7(0x162)][_0x201cc7(0x18e)](), this[_0x201cc7(0x123)][_0x201cc7(0x18e)](), this['LRF'][_0x201cc7(0x18e)](), this[_0x201cc7(0x113)]['calculateMass'](), this[_0x201cc7(0xb8)]['calculateMass'](), this[_0x201cc7(0xec)][_0x201cc7(0x18e)](), this[_0x201cc7(0x198)][_0x201cc7(0x18e)](), this['LLB'][_0x201cc7(0x18e)](), this[_0x201cc7(0xe0)][_0x201cc7(0xc5)](p5[_0x201cc7(0x1f6)][_0x201cc7(0x1aa)](this[_0x201cc7(0x162)][_0x201cc7(0xe0)], this[_0x201cc7(0x162)][_0x201cc7(0x251)])), this[_0x201cc7(0x251)] += this[_0x201cc7(0x162)][_0x201cc7(0x251)], this[_0x201cc7(0xe0)]['add'](p5[_0x201cc7(0x1f6)][_0x201cc7(0x1aa)](this[_0x201cc7(0x123)][_0x201cc7(0xe0)], this[_0x201cc7(0x123)][_0x201cc7(0x251)])), this[_0x201cc7(0x251)] += this[_0x201cc7(0x123)][_0x201cc7(0x251)], this['centerOfMass'][_0x201cc7(0xc5)](p5['Vector']['mult'](this['LRF'][_0x201cc7(0xe0)], this[_0x201cc7(0x1b1)][_0x201cc7(0x251)])), this['centerMass'] += this[_0x201cc7(0x1b1)][_0x201cc7(0x251)], this[_0x201cc7(0xe0)]['add'](p5['Vector']['mult'](this[_0x201cc7(0x113)][_0x201cc7(0xe0)], this[_0x201cc7(0x113)]['centerMass'])), this['centerMass'] += this['LLF'][_0x201cc7(0x251)], this[_0x201cc7(0xe0)][_0x201cc7(0xc5)](p5['Vector'][_0x201cc7(0x1aa)](this[_0x201cc7(0xb8)][_0x201cc7(0xe0)], this[_0x201cc7(0xb8)]['centerMass'])), this[_0x201cc7(0x251)] += this[_0x201cc7(0xb8)][_0x201cc7(0x251)], this[_0x201cc7(0xe0)]['add'](p5[_0x201cc7(0x1f6)]['mult'](this[_0x201cc7(0xec)][_0x201cc7(0xe0)], this[_0x201cc7(0xec)][_0x201cc7(0x251)])), this[_0x201cc7(0x251)] += this[_0x201cc7(0xec)][_0x201cc7(0x251)], this[_0x201cc7(0xe0)][_0x201cc7(0xc5)](p5[_0x201cc7(0x1f6)][_0x201cc7(0x1aa)](this['LRB'][_0x201cc7(0xe0)], this[_0x201cc7(0x198)][_0x201cc7(0x251)])), this[_0x201cc7(0x251)] += this['LRB'][_0x201cc7(0x251)], this[_0x201cc7(0xe0)][_0x201cc7(0xc5)](p5['Vector'][_0x201cc7(0x1aa)](this[_0x201cc7(0x23c)]['centerOfMass'], this['LLB']['centerMass'])), this[_0x201cc7(0x251)] += this[_0x201cc7(0x23c)]['centerMass'], this[_0x201cc7(0xe0)]['div'](this[_0x201cc7(0x251)])) : error(_0x201cc7(0x264));
+    }
+  } ['getAllNodesForces'](_0x416057) {
+    const _0x45cf81 = a0_0x5310b3;
+    let _0x55018c = createVector();
+    if (0x0 == this['state']);
+    else {
+      if (0x1 == this[_0x45cf81(0x272)]) {
+        for (let _0x354989 of this[_0x45cf81(0x226)]) if (_0x416057 != _0x354989) {
+          let _0x1fb30d = p5[_0x45cf81(0x1f6)][_0x45cf81(0xe5)](_0x354989[_0x45cf81(0x273)], _0x416057[_0x45cf81(0x273)]);
+          0x0 == _0x1fb30d[_0x45cf81(0x1fa)]() && _0x1fb30d[_0x45cf81(0xc5)](smallRandomValue(), smallRandomValue()), _0x1fb30d[_0x45cf81(0xbe)]()[_0x45cf81(0x1aa)](-0.264 / pow(_0x1fb30d['mag'](), 0x2)), _0x55018c['add'](_0x1fb30d);
+        }
+      } else {
+        if (0x2 == this[_0x45cf81(0x272)]) {
+          let _0x27e160 = this[_0x45cf81(0xe0)][_0x45cf81(0x157)](_0x416057[_0x45cf81(0x273)]);
+          if (this[_0x45cf81(0x1fe)]['w'] / _0x27e160 < 0.65) {
+            let _0x5ae942 = createVector();
+            _0x5ae942 = p5[_0x45cf81(0x1f6)][_0x45cf81(0xe5)](this[_0x45cf81(0xe0)], _0x416057[_0x45cf81(0x273)]), _0x5ae942[_0x45cf81(0xbe)]()[_0x45cf81(0x1aa)](0xc350 / pow(_0x27e160, 0x2)), _0x55018c[_0x45cf81(0xc5)](_0x5ae942);
+          } else _0x55018c[_0x45cf81(0xc5)](this['ULF'][_0x45cf81(0x25e)](_0x416057)), _0x55018c['add'](this['URF']['getAllNodesForces'](_0x416057)), _0x55018c['add'](this[_0x45cf81(0x113)][_0x45cf81(0x25e)](_0x416057)), _0x55018c[_0x45cf81(0xc5)](this[_0x45cf81(0x1b1)][_0x45cf81(0x25e)](_0x416057)), _0x55018c[_0x45cf81(0xc5)](this[_0x45cf81(0xec)][_0x45cf81(0x25e)](_0x416057)), _0x55018c[_0x45cf81(0xc5)](this[_0x45cf81(0xb8)][_0x45cf81(0x25e)](_0x416057)), _0x55018c[_0x45cf81(0xc5)](this[_0x45cf81(0x23c)][_0x45cf81(0x25e)](_0x416057)), _0x55018c[_0x45cf81(0xc5)](this[_0x45cf81(0x198)][_0x45cf81(0x25e)](_0x416057));
+        } else verbose && error('forcesOnNode:\x20state\x20missing');
+      }
+    } return _0x55018c;
+  } [a0_0x5310b3(0x1bc)](_0x2779be) {
+    const _0x416384 = a0_0x5310b3;
+    if (_0x2779be[_0x416384(0x12b)](), _0x2779be[_0x416384(0x1a8)](this[_0x416384(0x1fe)]['x'], this[_0x416384(0x1fe)]['y'], this[_0x416384(0x1fe)]['z']), _0x2779be['stroke'](0xff, 0xff, 0xff, 0x14), _0x2779be[_0x416384(0x204)](0.5), _0x2779be[_0x416384(0x1e4)](), _0x2779be[_0x416384(0x187)](0x2 * this['boundary']['w'], 0x2 * this['boundary']['h'], 0x2 * this[_0x416384(0x1fe)]['d']), _0x2779be[_0x416384(0x106)](), 0x2 == this[_0x416384(0x272)] ? _0x2779be[_0x416384(0xc6)](0x0, 0xff, 0xff, 0x32) : null != this[_0x416384(0x226)] ? _0x2779be['fill'](0x1e, 0xff, 0xff, 0x32) : _0x2779be[_0x416384(0xc6)](0x0, 0x32), _0x2779be[_0x416384(0x11e)](), _0x2779be[_0x416384(0x231)](this[_0x416384(0x1fe)]['x'], this[_0x416384(0x1fe)]['y'], 0x2, 0x2), 0x0 != this[_0x416384(0xe0)]['x'] && 0x0 != this['centerOfMass']['y']) {
+      _0x2779be[_0x416384(0xb4)](0x0, 0xff, 0xff, 0x64), _0x2779be[_0x416384(0xd0)](this[_0x416384(0x1fe)]['x'], this[_0x416384(0x1fe)]['y'], this[_0x416384(0xe0)]['x'], this['centerOfMass']['y']), _0x2779be[_0x416384(0x11e)](), _0x2779be['fill'](0x0, 0xff, 0xff, 0x1);
+      let _0x37ad21 = 0x3 * this['centerMass'];
+      _0x2779be[_0x416384(0xfc)](this[_0x416384(0xe0)]['x'], this[_0x416384(0xe0)]['y'], _0x37ad21, _0x37ad21);
+    } if (null != this[_0x416384(0x226)]) {
+      for (let _0x3d2bb2 of this[_0x416384(0x226)]) _0x2779be[_0x416384(0xb4)](0x1e, 0xff, 0xff, 0x32), _0x2779be[_0x416384(0xd0)](this['boundary']['x'], this[_0x416384(0x1fe)]['y'], _0x3d2bb2[_0x416384(0x273)]['x'], _0x3d2bb2['position']['y']), _0x2779be[_0x416384(0x1e4)](), _0x2779be[_0x416384(0xb4)](0xa0, 0xff, 0xff, 0x32), _0x2779be[_0x416384(0xfc)](_0x3d2bb2[_0x416384(0x273)]['x'], _0x3d2bb2[_0x416384(0x273)]['y'], 0x4, 0x4);
+    } 0x2 == this['state'] && (this[_0x416384(0x162)][_0x416384(0x1bc)](_0x2779be), this[_0x416384(0x123)][_0x416384(0x1bc)](_0x2779be), this[_0x416384(0x1b1)]['show'](_0x2779be), this[_0x416384(0x113)][_0x416384(0x1bc)](_0x2779be), this[_0x416384(0xb8)][_0x416384(0x1bc)](_0x2779be), this[_0x416384(0xec)]['show'](_0x2779be), this[_0x416384(0x198)]['show'](_0x2779be), this[_0x416384(0x23c)]['show'](_0x2779be));
+  }
+} class Cube {
+  constructor(_0x292848, _0x2876f1, _0x2498f1, _0x173c56, _0x30de3c, _0xcae96) {
+    this['x'] = _0x292848, this['y'] = _0x2876f1, this['z'] = _0x2498f1, this['w'] = _0x173c56, this['h'] = _0x30de3c, this['d'] = _0xcae96;
+  } [a0_0x5310b3(0x10d)](_0x228bd7) {
+    const _0x5aacf8 = a0_0x5310b3;
+    return _0x228bd7[_0x5aacf8(0x273)]['x'] >= this['x'] - this['w'] && _0x228bd7[_0x5aacf8(0x273)]['x'] <= this['x'] + this['w'] && _0x228bd7[_0x5aacf8(0x273)]['y'] >= this['y'] - this['h'] && _0x228bd7[_0x5aacf8(0x273)]['y'] <= this['y'] + this['h'] && _0x228bd7['position']['z'] >= this['z'] - this['d'] && _0x228bd7['position']['z'] <= this['z'] + this['d'];
+  } [a0_0x5310b3(0x14a)](_0x2c7afc) {
+    return !(_0x2c7afc['x'] - _0x2c7afc['w'] > this['x'] + this['w'] || _0x2c7afc['x'] + _0x2c7afc['w'] < this['x'] - this['w'] || _0x2c7afc['y'] - _0x2c7afc['h'] > this['y'] + this['h'] || _0x2c7afc['y'] + _0x2c7afc['h'] < this['y'] - this['h'] || _0x2c7afc['z'] - _0x2c7afc['d'] > this['z'] + this['d'] || _0x2c7afc['z'] + _0x2c7afc['d'] < this['z'] - this['d']);
+  } [a0_0x5310b3(0x24b)]() {
+    const _0xbe575c = a0_0x5310b3;
+    return 'x=' + this['x'] + _0xbe575c(0x1b0) + this['y'] + '\x20z=' + this['z'] + _0xbe575c(0xb6) + this['w'] + _0xbe575c(0x233) + this['h'] + _0xbe575c(0xfd) + this['d'];
+  }
+} function updateURL() {
+  const _0xae91e = a0_0x5310b3;
+  if (verbose && console[_0xae91e(0x1e3)]('updateURL'), verbose && console[_0xae91e(0x1e3)](history['pushState']), history['pushState']) {
+    let _0x2a4b46 = window[_0xae91e(0x145)][_0xae91e(0x16e)] + '//' + window[_0xae91e(0x145)][_0xae91e(0x14f)] + window['location']['pathname'] + '?' + (_0xae91e(0x244) === parameters[_0xae91e(0x17b)] ? _0xae91e(0x12c) + graph['nodes'] + '&edges=' + edgesToString(graph[_0xae91e(0x222)]) : 'graph=' + parameters[_0xae91e(0x17b)]) + _0xae91e(0xbc) + (parameters[_0xae91e(0x12a)] ? 'dual' : 'single') + '&showgraph=' + parameters[_0xae91e(0xf8)] + '&showconfigspace=' + parameters[_0xae91e(0xf0)] + '&showrobots=' + parameters[_0xae91e(0x202)];
+    window['history'][_0xae91e(0xc3)]({ 'path': _0x2a4b46 }, '', _0x2a4b46), verbose && console[_0xae91e(0x1e3)](_0x2a4b46);
+  }
+} function edgesToString(_0x1996dc) {
+  const _0x136ede = a0_0x5310b3;
+  let _0x2b161f = '';
+  for (let _0x10f580 of _0x1996dc) _0x2b161f += '[' + _0x10f580 + '],';
+  return _0x2b161f = _0x2b161f['substr'](0x0, _0x2b161f[_0x136ede(0x147)] - 0x1), _0x2b161f;
+} function setParametersFromURL() {
+  const _0x3620a0 = a0_0x5310b3;
+  verbose && console[_0x3620a0(0x1e3)](_0x3620a0(0xd7));
+  let _0x44e82c, _0x38f3cd, _0x4b98a9 = getURL(), _0x35c9c7 = [], _0x414056 = split(_0x4b98a9, '?');
+  if (0x2 !== _0x414056[_0x3620a0(0x147)]) return;
+  let _0x34ddef = _0x414056[0x1], _0x2cd4ba = {};
+  for (let _0x1f69c9 of split(_0x34ddef, '&')) {
+    let _0x2531f5 = split(_0x1f69c9, '=');
+    _0x2cd4ba[_0x2531f5[0x0]] = _0x2531f5[0x1];
+  } let _0x5dbbba = _0x2cd4ba['view'];
+  _0x3620a0(0x158) === _0x5dbbba ? parameters[_0x3620a0(0x12a)] = !0x1 : _0x3620a0(0xe7) === _0x5dbbba && (parameters[_0x3620a0(0x12a)] = !0x0);
+  let _0x1ec608 = _0x2cd4ba['showgraph'];
+  parameters[_0x3620a0(0xf8)] = _0x3620a0(0x25f) !== _0x1ec608;
+  let _0x3bb735 = _0x2cd4ba[_0x3620a0(0x1b9)];
+  parameters['showConfigurationspace'] = _0x3620a0(0x25f) !== _0x3bb735;
+  let _0x11c8b9 = _0x2cd4ba['showrobots'];
+  parameters[_0x3620a0(0x202)] = _0x3620a0(0x25f) !== _0x11c8b9;
+  let _0x11cc78 = _0x2cd4ba[_0x3620a0(0x15f)];
+  if (void 0x0 !== _0x11cc78 && _0x3620a0(0x244) !== _0x11cc78) parameters[_0x3620a0(0x17b)] = _0x11cc78;
+  else {
+    let _0x5994b7 = _0x2cd4ba[_0x3620a0(0x1d1)];
+    if (void 0x0 === _0x5994b7) return;
+    _0x44e82c = _0x5994b7['split'](',')[_0x3620a0(0xab)](Number);
+    for (let _0x3749e8 of _0x44e82c) if (isNaN(_0x3749e8)) return;
+    let _0x75b19 = _0x2cd4ba['edges'];
+    verbose && console[_0x3620a0(0x1e3)](_0x75b19), null !== _0x75b19 && (_0x75b19 = decodeURIComponent(_0x75b19)), verbose && console[_0x3620a0(0x1e3)](_0x75b19), void 0x0 !== _0x75b19 && '[' == _0x75b19[_0x3620a0(0xdc)](0x0) && ']' == _0x75b19['charAt'](_0x75b19[_0x3620a0(0x147)] - 0x1) && (verbose && console[_0x3620a0(0x1e3)](_0x3620a0(0x12d)), _0x75b19 = _0x75b19[_0x3620a0(0x1c5)](0x1, -0x1), _0x35c9c7 = _0x75b19[_0x3620a0(0x189)](/[^\d],[^\d]/)[_0x3620a0(0xab)](_0x3adc81 => _0x3adc81[_0x3620a0(0x189)](',')['map'](Number))), _0x38f3cd = [];
+    for (let _0x5bd680 of _0x35c9c7) 0x2 === _0x5bd680[_0x3620a0(0x147)] && _0x44e82c[_0x3620a0(0xfb)](_0x5bd680[0x0]) && _0x44e82c[_0x3620a0(0xfb)](_0x5bd680[0x1]) && _0x5bd680[0x0] !== _0x5bd680[0x1] && !edgesContainEdge(_0x38f3cd, _0x5bd680) && _0x38f3cd[_0x3620a0(0x12b)](_0x5bd680);
+    void 0x0 !== _0x44e82c && (customGraph = {}, customGraph[_0x3620a0(0x1d1)] = _0x44e82c, customGraph[_0x3620a0(0x222)] = _0x38f3cd, parameters[_0x3620a0(0x17b)] = _0x3620a0(0x244));
+  }
+} function updateInfoString() {
+  const _0x2923ee = a0_0x5310b3;
+  infoStrings = [], infoStrings[_0x2923ee(0x12b)]('Graph\x20=\x20' + parameters[_0x2923ee(0x17b)]), infoStrings['push']('Nodes\x20=\x20' + JSON['stringify'](graph[_0x2923ee(0x1d1)])), infoStrings['push']('Edges\x20=\x20' + JSON[_0x2923ee(0x254)](graph[_0x2923ee(0x222)]));
+  let _0x467be3 = [];
+  for (let _0x52ede2 of graph[_0x2923ee(0x105)][_0x2923ee(0x1d1)]) _0x52ede2[_0x2923ee(0x293)] && _0x467be3[_0x2923ee(0x12b)](_0x52ede2[_0x2923ee(0xe4)]);
+  infoStrings['push'](_0x2923ee(0x1c6) + JSON[_0x2923ee(0x254)](_0x467be3));
+  let _0x20f46a = graphicsForConfigurationSpace[_0x2923ee(0xff)]['getState']();
+  infoStrings['push']('Camera\x20state\x20=\x20' + JSON[_0x2923ee(0x254)](_0x20f46a));
+  let _0x573a55 = {};
+  _0x573a55[_0x2923ee(0xe9)] = parameters['mode'], _0x573a55[_0x2923ee(0xf8)] = parameters['showGraph'], _0x573a55[_0x2923ee(0xf0)] = parameters[_0x2923ee(0xf0)], _0x573a55[_0x2923ee(0x202)] = parameters[_0x2923ee(0x202)], _0x573a55[_0x2923ee(0x24a)] = parameters[_0x2923ee(0x24a)], _0x573a55[_0x2923ee(0x263)] = parameters['distinguishDots'], _0x573a55[_0x2923ee(0x1a7)] = parameters['gridOn'], _0x573a55[_0x2923ee(0x160)] = parameters['squareOn'], _0x573a55[_0x2923ee(0x14d)] = parameters[_0x2923ee(0x14d)], _0x573a55[_0x2923ee(0x274)] = parameters[_0x2923ee(0x274)], _0x573a55[_0x2923ee(0x16c)] = parameters[_0x2923ee(0x16c)], _0x573a55['showText'] = parameters['showText'], _0x573a55[_0x2923ee(0x177)] = parameters[_0x2923ee(0x177)], _0x573a55[_0x2923ee(0x1ab)] = parameters[_0x2923ee(0x1ab)], _0x573a55[_0x2923ee(0x1bf)] = parameters['moveDotsRandomly'], _0x573a55['robotASpeed'] = parameters[_0x2923ee(0x135)], _0x573a55[_0x2923ee(0x20e)] = parameters[_0x2923ee(0x20e)], _0x573a55[_0x2923ee(0x292)] = parameters[_0x2923ee(0x292)], _0x573a55[_0x2923ee(0x1d8)] = parameters['recordHistory'], _0x573a55[_0x2923ee(0x182)] = parameters[_0x2923ee(0x182)], _0x573a55[_0x2923ee(0x1b8)] = parameters[_0x2923ee(0x1b8)], _0x573a55[_0x2923ee(0xb9)] = parameters[_0x2923ee(0xb9)], _0x573a55[_0x2923ee(0x1e0)] = parameters[_0x2923ee(0x1e0)], _0x573a55[_0x2923ee(0x26c)] = parameters[_0x2923ee(0x26c)], _0x573a55[_0x2923ee(0xae)] = parameters[_0x2923ee(0xae)], _0x573a55[_0x2923ee(0x125)] = parameters[_0x2923ee(0x125)], _0x573a55['colorRobotB'] = parameters[_0x2923ee(0xc9)], _0x573a55[_0x2923ee(0xde)] = parameters[_0x2923ee(0xde)], _0x573a55[_0x2923ee(0x212)] = parameters[_0x2923ee(0x212)], _0x573a55[_0x2923ee(0x1df)] = parameters['colorGraphEdge'], _0x573a55[_0x2923ee(0xd5)] = parameters[_0x2923ee(0xd5)], _0x573a55[_0x2923ee(0xc4)] = parameters[_0x2923ee(0xc4)], _0x573a55[_0x2923ee(0xb3)] = parameters[_0x2923ee(0xb3)], _0x573a55[_0x2923ee(0xf3)] = parameters[_0x2923ee(0xf3)], _0x573a55[_0x2923ee(0x114)] = parameters['selectedNodeForEdgeColor'], _0x573a55[_0x2923ee(0x16b)] = parameters[_0x2923ee(0x16b)], _0x573a55[_0x2923ee(0x28b)] = parameters[_0x2923ee(0x28b)], _0x573a55[_0x2923ee(0x13a)] = parameters[_0x2923ee(0x13a)], _0x573a55[_0x2923ee(0x1fd)] = parameters[_0x2923ee(0x1fd)], _0x573a55[_0x2923ee(0x163)] = parameters['edgeWidthConfigSpace'], _0x573a55[_0x2923ee(0xc0)] = parameters[_0x2923ee(0xc0)], _0x573a55[_0x2923ee(0x28c)] = parameters[_0x2923ee(0x28c)], infoStrings['push'](_0x2923ee(0x1bd) + JSON[_0x2923ee(0x254)](_0x573a55));
+  let _0xf429a7 = {};
+  _0xf429a7['edgelength'] = graph[_0x2923ee(0x105)][_0x2923ee(0x134)], _0xf429a7[_0x2923ee(0x1ed)] = graph[_0x2923ee(0x105)]['cohesionthreshold'], _0xf429a7[_0x2923ee(0x11f)] = graph[_0x2923ee(0x105)][_0x2923ee(0x11f)], _0xf429a7[_0x2923ee(0x16d)] = graph[_0x2923ee(0x105)][_0x2923ee(0x16d)], _0xf429a7['planarForce'] = graph[_0x2923ee(0x105)][_0x2923ee(0xb1)], _0xf429a7[_0x2923ee(0x290)] = graph[_0x2923ee(0x105)]['centerForce'], _0xf429a7['extraCenterForce'] = graph[_0x2923ee(0x105)][_0x2923ee(0x243)], _0xf429a7['moveToCenter'] = graph['graphLayout'][_0x2923ee(0x152)], infoStrings[_0x2923ee(0x12b)]('Graph\x20parameters\x20=\x20' + JSON[_0x2923ee(0x254)](_0xf429a7));
+  let _0x3bbadd = {};
+  _0x3bbadd['firstCoordinateEdgeLength'] = configuration_space[_0x2923ee(0x105)]['firstCoordinateEdgeLength'], _0x3bbadd[_0x2923ee(0x1f4)] = configuration_space[_0x2923ee(0x105)][_0x2923ee(0x1f4)], _0x3bbadd[_0x2923ee(0x256)] = configuration_space[_0x2923ee(0x105)][_0x2923ee(0x256)], _0x3bbadd[_0x2923ee(0x1f0)] = configuration_space[_0x2923ee(0x105)][_0x2923ee(0x1f0)], _0x3bbadd[_0x2923ee(0x17c)] = configuration_space[_0x2923ee(0x105)]['firstCoordinateMirrorForce'], _0x3bbadd[_0x2923ee(0xb5)] = configuration_space[_0x2923ee(0x105)][_0x2923ee(0xb5)], _0x3bbadd[_0x2923ee(0x1cc)] = configuration_space[_0x2923ee(0x105)][_0x2923ee(0x1cc)], _0x3bbadd[_0x2923ee(0x18b)] = configuration_space[_0x2923ee(0x105)][_0x2923ee(0x18b)], _0x3bbadd[_0x2923ee(0x1ed)] = configuration_space['graphLayout'][_0x2923ee(0x1ed)], _0x3bbadd[_0x2923ee(0x11f)] = configuration_space[_0x2923ee(0x105)][_0x2923ee(0x11f)], _0x3bbadd[_0x2923ee(0x16d)] = configuration_space[_0x2923ee(0x105)]['separationFactor'], _0x3bbadd['centerForce'] = configuration_space[_0x2923ee(0x105)]['centerForce'], _0x3bbadd['extraCenterForce'] = configuration_space['graphLayout'][_0x2923ee(0x243)], _0x3bbadd[_0x2923ee(0x152)] = configuration_space['graphLayout'][_0x2923ee(0x152)], infoStrings[_0x2923ee(0x12b)](_0x2923ee(0x122) + JSON[_0x2923ee(0x254)](_0x3bbadd));
+  for (let _0x4df1db of graph[_0x2923ee(0x1d1)]) infoStrings[_0x2923ee(0x12b)](_0x2923ee(0x249) + _0x4df1db + _0x2923ee(0xd6) + posToString(graph['graphLayout']['getNode'](_0x4df1db)['position']));
+  for (let _0x167543 of configuration_space[_0x2923ee(0x105)][_0x2923ee(0x1d1)]) infoStrings[_0x2923ee(0x12b)](_0x2923ee(0x184) + _0x167543['label'] + _0x2923ee(0xd6) + posToString(_0x167543[_0x2923ee(0x273)]));
+  let _0x42f2d8 = '';
+  _0x42f2d8 += _0x2923ee(0x283);
+  for (let _0x350106 of infoStrings) _0x42f2d8 += _0x350106 + _0x2923ee(0x1c7);
+  _0x42f2d8 += _0x2923ee(0x1e8), infoDiv[_0x2923ee(0x183)](_0x42f2d8);
+} function updateLayoutStrings() {
+  const _0x1403b6 = a0_0x5310b3;
+  layoutStrings = [];
+  let _0x4ee8d2 = {};
+  _0x4ee8d2[_0x1403b6(0x134)] = graph[_0x1403b6(0x105)][_0x1403b6(0x134)], _0x4ee8d2[_0x1403b6(0x1ed)] = graph[_0x1403b6(0x105)][_0x1403b6(0x1ed)], _0x4ee8d2['repulsion'] = graph[_0x1403b6(0x105)][_0x1403b6(0x11f)], _0x4ee8d2[_0x1403b6(0x16d)] = graph[_0x1403b6(0x105)][_0x1403b6(0x16d)], _0x4ee8d2['planarForce'] = graph[_0x1403b6(0x105)]['planarForce'], _0x4ee8d2[_0x1403b6(0x290)] = graph[_0x1403b6(0x105)][_0x1403b6(0x290)], _0x4ee8d2[_0x1403b6(0x243)] = graph[_0x1403b6(0x105)]['extraCenterForce'], _0x4ee8d2[_0x1403b6(0x152)] = graph[_0x1403b6(0x105)][_0x1403b6(0x152)], layoutStrings[_0x1403b6(0x12b)](_0x1403b6(0xd2) + JSON['stringify'](_0x4ee8d2));
+  let _0x4ea8cd = {};
+  _0x4ea8cd[_0x1403b6(0x14b)] = configuration_space[_0x1403b6(0x105)]['firstCoordinateEdgeLength'], _0x4ea8cd[_0x1403b6(0x1f4)] = configuration_space[_0x1403b6(0x105)][_0x1403b6(0x1f4)], _0x4ea8cd[_0x1403b6(0x256)] = configuration_space[_0x1403b6(0x105)]['secondCoordinateEdgeLength'], _0x4ea8cd['secondCoordinateForce'] = configuration_space[_0x1403b6(0x105)][_0x1403b6(0x1f0)], _0x4ea8cd[_0x1403b6(0x17c)] = configuration_space[_0x1403b6(0x105)]['firstCoordinateMirrorForce'], _0x4ea8cd[_0x1403b6(0xb5)] = configuration_space[_0x1403b6(0x105)][_0x1403b6(0xb5)], _0x4ea8cd[_0x1403b6(0x1cc)] = configuration_space[_0x1403b6(0x105)]['coordinatePreference'], _0x4ea8cd[_0x1403b6(0x18b)] = configuration_space[_0x1403b6(0x105)][_0x1403b6(0x18b)], _0x4ea8cd['cohesionthreshold'] = configuration_space[_0x1403b6(0x105)][_0x1403b6(0x1ed)], _0x4ea8cd[_0x1403b6(0x11f)] = configuration_space[_0x1403b6(0x105)]['repulsion'], _0x4ea8cd['separationFactor'] = configuration_space[_0x1403b6(0x105)][_0x1403b6(0x16d)], _0x4ea8cd[_0x1403b6(0x290)] = configuration_space[_0x1403b6(0x105)][_0x1403b6(0x290)], _0x4ea8cd[_0x1403b6(0x243)] = configuration_space['graphLayout'][_0x1403b6(0x243)], _0x4ea8cd['moveToCenter'] = configuration_space['graphLayout'][_0x1403b6(0x152)], layoutStrings[_0x1403b6(0x12b)](_0x1403b6(0x122) + JSON[_0x1403b6(0x254)](_0x4ea8cd));
+} function writeToFiles() {
+  writeObjToFile();
+} function writeParametersToFile() {
+  const _0x2692a1 = a0_0x5310b3;
+  updateInfoString(), saveStrings(infoStrings, makeFileName(_0x2692a1(0x19d)), _0x2692a1(0x1ec));
+} function writeLayoutToFile() {
+  const _0x12dd84 = a0_0x5310b3;
+  updateLayoutStrings(), saveStrings(layoutStrings, makeFileName(_0x12dd84(0x217)), _0x12dd84(0x1ec));
+} function writeChainComplexToFile() {
+  const _0x1a1747 = a0_0x5310b3;
+  let _0x559b52 = getChompString();
+  saveStrings([_0x559b52], makeFileName(''), _0x1a1747(0xf4));
+} function writeObjToFile() {
+  const _0x2d97e6 = a0_0x5310b3;
+  let _0x23776e = getObjString();
+  saveStrings([_0x23776e], makeFileName(''), _0x2d97e6(0xf2));
+} function readHomology() {
+  const _0x2bfe11 = a0_0x5310b3, _0x151a19 = _0x2bfe11(0x25b) + parameters[_0x2bfe11(0x17b)] + _0x2bfe11(0x1b4);
+  loadStrings(_0x151a19, saveLoopsInConfigurationSpace);
+} function saveLoopsInConfigurationSpace(_0x5ea9bf) {
+  const _0x275e38 = a0_0x5310b3;
+  let _0x52db56 = getLoops(_0x5ea9bf);
+  configuration_space[_0x275e38(0x142)] = _0x52db56, console[_0x275e38(0x1e3)](_0x275e38(0x139)), console[_0x275e38(0x1e3)](_0x52db56);
+} function getLoops(_0x1a92fd) {
+  const _0x15f6e8 = a0_0x5310b3;
+  let _0x511b5c = !0x1, _0x4c7a47 = [];
+  for (let _0x46c7b2 of _0x1a92fd) if (_0x511b5c || '[H_1]' !== _0x46c7b2) {
+    if (_0x511b5c) {
+      if ('' === _0x46c7b2) return _0x4c7a47;
+      {
+        let _0x1fd4d2 = _0x46c7b2[_0x15f6e8(0x189)](/[+-]/)[_0x15f6e8(0x218)](_0xdd3dbf => '' !== _0xdd3dbf)[_0x15f6e8(0xab)](trim)[_0x15f6e8(0xab)](_0x441e54 => JSON['parse'](_0x441e54));
+        _0x4c7a47[_0x15f6e8(0x12b)](_0x1fd4d2);
+      }
+    }
+  } else _0x511b5c = !0x0;
+} function readFromString(_0x2aceaa) {
+  const _0x333d7 = a0_0x5310b3;
+  let _0x241ed6 = {};
+  for (let _0x3c26e6 of _0x2aceaa) {
+    if ('' === _0x3c26e6) continue;
+    let _0x17d587 = split(_0x3c26e6, _0x333d7(0x1dd));
+    0x2 === _0x17d587[_0x333d7(0x147)] && (_0x241ed6[_0x17d587[0x0]] = _0x17d587[0x1]);
+  } parameters['graphType'] = _0x241ed6[_0x333d7(0x275)], 'custom' === parameters[_0x333d7(0x17b)] && (customGraph = {}, customGraph[_0x333d7(0x1d1)] = JSON[_0x333d7(0x262)](_0x241ed6[_0x333d7(0x1e6)]), customGraph['edges'] = JSON[_0x333d7(0x262)](_0x241ed6[_0x333d7(0x1d3)]));
+  let _0xe5ef90 = _0x241ed6['Parameters'], _0x3b6821 = JSON['parse'](_0xe5ef90);
+  parameters[_0x333d7(0xe9)] = _0x3b6821[_0x333d7(0xe9)], parameters[_0x333d7(0xf8)] = _0x3b6821[_0x333d7(0xf8)], parameters['showConfigurationspace'] = _0x3b6821[_0x333d7(0xf0)], parameters[_0x333d7(0x202)] = _0x3b6821['showRobots'], parameters[_0x333d7(0x24a)] = _0x3b6821['syncView'], parameters[_0x333d7(0x263)] = _0x3b6821[_0x333d7(0x263)], parameters['gridOn'] = _0x3b6821[_0x333d7(0x1a7)], parameters[_0x333d7(0x160)] = _0x3b6821['squareOn'], parameters[_0x333d7(0x14d)] = _0x3b6821[_0x333d7(0x14d)], parameters[_0x333d7(0x274)] = _0x3b6821['granularityFirstCoordinate'], parameters['granularitySecondCoordinate'] = _0x3b6821['granularitySecondCoordinate'], parameters[_0x333d7(0x225)] = _0x3b6821[_0x333d7(0x225)], parameters[_0x333d7(0x177)] = _0x3b6821['sphereView'], parameters[_0x333d7(0x1ab)] = _0x3b6821[_0x333d7(0x1ab)], parameters['moveDotsRandomly'] = _0x3b6821[_0x333d7(0x1bf)], parameters[_0x333d7(0x135)] = _0x3b6821['robotASpeed'], parameters[_0x333d7(0x20e)] = _0x3b6821['robotBSpeed'], parameters[_0x333d7(0x292)] = _0x3b6821['amountMultiplier'], parameters[_0x333d7(0x1d8)] = _0x3b6821['recordHistory'], parameters[_0x333d7(0x182)] = _0x3b6821[_0x333d7(0x182)], parameters['sphereDetail'] = _0x3b6821['sphereDetail'], parameters['speedUp'] = _0x3b6821[_0x333d7(0xb9)], parameters[_0x333d7(0x1e0)] = _0x3b6821[_0x333d7(0x1e0)], parameters['labelY'] = _0x3b6821[_0x333d7(0x26c)], parameters['labelZ'] = _0x3b6821[_0x333d7(0xae)], parameters[_0x333d7(0x125)] = _0x3b6821[_0x333d7(0x125)], parameters[_0x333d7(0xc9)] = _0x3b6821['colorRobotB'], parameters[_0x333d7(0xde)] = _0x3b6821[_0x333d7(0xde)], parameters['colorNode'] = _0x3b6821[_0x333d7(0x212)], parameters['colorGraphEdge'] = _0x3b6821[_0x333d7(0x1df)], parameters['squareColor'] = _0x3b6821['squareColor'], parameters[_0x333d7(0xc4)] = _0x3b6821[_0x333d7(0xc4)], parameters[_0x333d7(0xb3)] = _0x3b6821['activeDotColor'], parameters[_0x333d7(0xf3)] = _0x3b6821['deleteNodeColor'], parameters[_0x333d7(0x114)] = _0x3b6821[_0x333d7(0x114)], parameters['nodeSize'] = _0x3b6821[_0x333d7(0x16b)], parameters[_0x333d7(0x28b)] = _0x3b6821[_0x333d7(0x28b)], parameters[_0x333d7(0x13a)] = _0x3b6821[_0x333d7(0x13a)], parameters[_0x333d7(0x1fd)] = _0x3b6821['edgeWidthGraph'], parameters[_0x333d7(0x163)] = _0x3b6821[_0x333d7(0x163)], parameters[_0x333d7(0xc0)] = _0x3b6821[_0x333d7(0xc0)], parameters[_0x333d7(0x28c)] = _0x3b6821[_0x333d7(0x28c)], init();
+  let _0x27cfd9 = JSON[_0x333d7(0x262)](_0x241ed6[_0x333d7(0x23e)]);
+  for (let _0x51e001 of _0x27cfd9) graph['graphLayout'][_0x333d7(0x14c)](_0x51e001)[_0x333d7(0x293)] = !0x0;
+  let _0x2110eb = _0x241ed6[_0x333d7(0x194)], _0x52022f = JSON[_0x333d7(0x262)](_0x2110eb);
+  graph[_0x333d7(0x105)]['edgelength'] = _0x52022f[_0x333d7(0x134)], graph['graphLayout']['cohesionthreshold'] = _0x52022f[_0x333d7(0x1ed)], graph['graphLayout'][_0x333d7(0x11f)] = _0x52022f[_0x333d7(0x11f)], graph[_0x333d7(0x105)][_0x333d7(0x16d)] = _0x52022f[_0x333d7(0x16d)], graph['graphLayout'][_0x333d7(0xb1)] = _0x52022f[_0x333d7(0xb1)], graph[_0x333d7(0x105)][_0x333d7(0x290)] = _0x52022f[_0x333d7(0x290)], graph[_0x333d7(0x105)][_0x333d7(0x243)] = _0x52022f[_0x333d7(0x243)], graph[_0x333d7(0x105)]['moveToCenter'] = _0x52022f[_0x333d7(0x152)];
+  let _0x24a0fe = _0x241ed6[_0x333d7(0x120)], _0xdc385c = JSON['parse'](_0x24a0fe);
+  configuration_space[_0x333d7(0x105)]['firstCoordinateEdgeLength'] = _0xdc385c[_0x333d7(0x14b)], configuration_space[_0x333d7(0x105)][_0x333d7(0x1f4)] = _0xdc385c['firstCoordinateForce'], configuration_space[_0x333d7(0x105)]['secondCoordinateEdgeLength'] = _0xdc385c[_0x333d7(0x256)], configuration_space['graphLayout'][_0x333d7(0x1f0)] = _0xdc385c[_0x333d7(0x1f0)], configuration_space[_0x333d7(0x105)][_0x333d7(0x17c)] = _0xdc385c['firstCoordinateMirrorForce'], configuration_space[_0x333d7(0x105)]['secondCoordinateMirrorForce'] = _0xdc385c[_0x333d7(0xb5)], configuration_space[_0x333d7(0x105)][_0x333d7(0x1cc)] = _0xdc385c[_0x333d7(0x1cc)], configuration_space['graphLayout'][_0x333d7(0x18b)] = _0xdc385c[_0x333d7(0x18b)], configuration_space[_0x333d7(0x105)][_0x333d7(0x1ed)] = _0xdc385c[_0x333d7(0x1ed)], configuration_space[_0x333d7(0x105)][_0x333d7(0x11f)] = _0xdc385c[_0x333d7(0x11f)], configuration_space[_0x333d7(0x105)][_0x333d7(0x16d)] = _0xdc385c[_0x333d7(0x16d)], configuration_space[_0x333d7(0x105)][_0x333d7(0x290)] = _0xdc385c[_0x333d7(0x290)], configuration_space['graphLayout'][_0x333d7(0x243)] = _0xdc385c[_0x333d7(0x243)], configuration_space[_0x333d7(0x105)]['moveToCenter'] = _0xdc385c[_0x333d7(0x152)], initGUI();
+  for (let _0x4dd635 of graph[_0x333d7(0x1d1)]) {
+    let _0x4cb23a = graph[_0x333d7(0x105)][_0x333d7(0x14c)](_0x4dd635), _0x43cc36 = _0x241ed6[_0x333d7(0x249) + _0x4dd635 + ')'];
+    void 0x0 !== _0x43cc36 && '[' == _0x43cc36[_0x333d7(0xdc)](0x0) && ']' == _0x43cc36['charAt'](_0x43cc36['length'] - 0x1) && (_0x43cc36 = _0x43cc36[_0x333d7(0x1c5)](0x1, -0x1), _0x43cc36 = _0x43cc36[_0x333d7(0x189)](',')[_0x333d7(0xab)](Number)), _0x4cb23a[_0x333d7(0x273)] = createVector(_0x43cc36[0x0], _0x43cc36[0x1], _0x43cc36[0x2]);
+  } for (let _0x531624 of configuration_space[_0x333d7(0x105)][_0x333d7(0x1d1)]) {
+    let _0x4dae5d = _0x241ed6[_0x333d7(0x184) + _0x531624[_0x333d7(0xe4)][0x0] + ',' + _0x531624[_0x333d7(0xe4)][0x1] + ')'];
+    void 0x0 !== _0x4dae5d && '[' == _0x4dae5d[_0x333d7(0xdc)](0x0) && ']' == _0x4dae5d[_0x333d7(0xdc)](_0x4dae5d[_0x333d7(0x147)] - 0x1) && (_0x4dae5d = _0x4dae5d[_0x333d7(0x1c5)](0x1, -0x1), _0x4dae5d = _0x4dae5d[_0x333d7(0x189)](',')[_0x333d7(0xab)](Number)), _0x531624[_0x333d7(0x273)] = createVector(_0x4dae5d[0x0], _0x4dae5d[0x1], _0x4dae5d[0x2]);
+  } let _0x15dc4a = _0x241ed6['Camera\x20state'];
+  graphicsForConfigurationSpace['easycam'][_0x333d7(0xbf)](JSON[_0x333d7(0x262)](_0x15dc4a)), parameters[_0x333d7(0xe9)] = _0x333d7(0x22a), updateMode();
+} function readFromFile(_0x10a11f) {
+  loadStrings(_0x10a11f, readFromString);
+} function readLayoutFromFile(_0x5315f6) {
+  loadStrings(_0x5315f6, readLayoutFromStrings);
+} function readLayoutFromStrings(_0x7e879) {
+  const _0x53d832 = a0_0x5310b3;
+  let _0x1098a7 = {};
+  for (let _0x5f02d1 of _0x7e879) {
+    if ('' === _0x5f02d1) continue;
+    let _0x372fcb = split(_0x5f02d1, '\x20=\x20');
+    0x2 === _0x372fcb[_0x53d832(0x147)] && (_0x1098a7[_0x372fcb[0x0]] = _0x372fcb[0x1]);
+  } let _0x1cdfa7 = _0x1098a7[_0x53d832(0x194)], _0x22a683 = JSON[_0x53d832(0x262)](_0x1cdfa7);
+  graph[_0x53d832(0x105)]['edgelength'] = _0x22a683[_0x53d832(0x134)], graph[_0x53d832(0x105)][_0x53d832(0x1ed)] = _0x22a683[_0x53d832(0x1ed)], graph[_0x53d832(0x105)][_0x53d832(0x11f)] = _0x22a683[_0x53d832(0x11f)], graph['graphLayout'][_0x53d832(0x16d)] = _0x22a683[_0x53d832(0x16d)], graph[_0x53d832(0x105)][_0x53d832(0xb1)] = _0x22a683[_0x53d832(0xb1)], graph[_0x53d832(0x105)]['centerForce'] = _0x22a683[_0x53d832(0x290)], graph[_0x53d832(0x105)][_0x53d832(0x243)] = _0x22a683[_0x53d832(0x243)], graph['graphLayout'][_0x53d832(0x152)] = _0x22a683[_0x53d832(0x152)];
+  let _0x1fdb7e = _0x1098a7['Configuration\x20space\x20parameters'], _0x2807f2 = JSON[_0x53d832(0x262)](_0x1fdb7e);
+  configuration_space[_0x53d832(0x105)][_0x53d832(0x14b)] = _0x2807f2[_0x53d832(0x14b)], configuration_space[_0x53d832(0x105)][_0x53d832(0x1f4)] = _0x2807f2[_0x53d832(0x1f4)], configuration_space[_0x53d832(0x105)]['secondCoordinateEdgeLength'] = _0x2807f2['secondCoordinateEdgeLength'], configuration_space[_0x53d832(0x105)][_0x53d832(0x1f0)] = _0x2807f2[_0x53d832(0x1f0)], configuration_space['graphLayout'][_0x53d832(0x17c)] = _0x2807f2[_0x53d832(0x17c)], configuration_space[_0x53d832(0x105)]['secondCoordinateMirrorForce'] = _0x2807f2[_0x53d832(0xb5)], configuration_space[_0x53d832(0x105)]['coordinatePreference'] = _0x2807f2[_0x53d832(0x1cc)], configuration_space[_0x53d832(0x105)][_0x53d832(0x18b)] = _0x2807f2[_0x53d832(0x18b)], configuration_space[_0x53d832(0x105)][_0x53d832(0x1ed)] = _0x2807f2[_0x53d832(0x1ed)], configuration_space[_0x53d832(0x105)][_0x53d832(0x11f)] = _0x2807f2[_0x53d832(0x11f)], configuration_space[_0x53d832(0x105)][_0x53d832(0x16d)] = _0x2807f2[_0x53d832(0x16d)], configuration_space[_0x53d832(0x105)][_0x53d832(0x290)] = _0x2807f2[_0x53d832(0x290)], configuration_space[_0x53d832(0x105)][_0x53d832(0x243)] = _0x2807f2['extraCenterForce'], configuration_space[_0x53d832(0x105)][_0x53d832(0x152)] = _0x2807f2[_0x53d832(0x152)], initGUI();
+} function posToString(_0x2a0c53) {
+  return '[' + _0x2a0c53['x'] + ',' + _0x2a0c53['y'] + ',' + _0x2a0c53['z'] + ']';
+} function handleFile(_0x428119) {
+  readFromString(_0x428119['data']['split']('\x0a'));
+} function getChompString() {
+  const _0x1a1c32 = a0_0x5310b3;
+  let _0x3fb680 = '';
+  _0x3fb680 += 'chain\x20complex\x0a\x0a', _0x3fb680 += 'max\x20dimension\x20=\x202\x0a\x0a', _0x3fb680 += _0x1a1c32(0x21a);
+  for (let _0x12b68d of configuration_space['states']) 0x0 === configuration_space[_0x1a1c32(0x285)](_0x12b68d) && (_0x3fb680 += _0x1a1c32(0x296) + JSON[_0x1a1c32(0x254)](_0x12b68d) + '\x0a');
+  _0x3fb680 += '\x0a\x0adimension\x201\x0a';
+  for (let _0x507361 of configuration_space[_0x1a1c32(0x138)]) if (0x1 === configuration_space[_0x1a1c32(0x285)](_0x507361)) {
+    let _0x3927b5;
+    _0x3927b5 = Array[_0x1a1c32(0xed)](_0x507361[0x0]) ? cartesianProductOf(_0x507361[0x0], [_0x507361[0x1]]) : cartesianProductOf([_0x507361[0x0]], _0x507361[0x1]), _0x3fb680 += '\x20#\x20' + JSON[_0x1a1c32(0x254)](_0x507361) + _0x1a1c32(0x155) + JSON[_0x1a1c32(0x254)](_0x3927b5[0x0]) + _0x1a1c32(0x291) + JSON[_0x1a1c32(0x254)](_0x3927b5[0x1]) + '\x0a';
+  } _0x3fb680 += _0x1a1c32(0xce);
+  for (let _0x386426 of configuration_space['states']) 0x2 === configuration_space[_0x1a1c32(0x285)](_0x386426) && (_0x3fb680 += _0x1a1c32(0x296) + JSON[_0x1a1c32(0x254)](_0x386426) + '\x20=', _0x3fb680 += _0x1a1c32(0x291) + JSON['stringify']([_0x386426[0x0], _0x386426[0x1][0x0]]), _0x3fb680 += _0x1a1c32(0x291) + JSON[_0x1a1c32(0x254)]([_0x386426[0x0][0x1], _0x386426[0x1]]), _0x3fb680 += _0x1a1c32(0x289) + JSON['stringify']([_0x386426[0x0], _0x386426[0x1][0x1]]), _0x3fb680 += _0x1a1c32(0x289) + JSON[_0x1a1c32(0x254)]([_0x386426[0x0][0x0], _0x386426[0x1]]), _0x3fb680 += '\x0a');
+  return _0x3fb680;
+} function getObjString() {
+  const _0x4d7e61 = a0_0x5310b3;
+  let _0x536a59 = '';
+  _0x536a59 += '#\x20OBJ\x0a###########################################\x0a\x0a';
+  let _0x1e31ff = 0x1;
+  for (let _0x5acc96 of configuration_space[_0x4d7e61(0x105)][_0x4d7e61(0x1d1)]) _0x5acc96[_0x4d7e61(0x137)] = _0x1e31ff, _0x536a59 += _0x4d7e61(0x239) + _0x1e31ff + _0x4d7e61(0x1dd) + _0x5acc96['label'] + '\x0a', _0x536a59 += 'v\x20' + _0x5acc96['position']['x'] + '\x20' + _0x5acc96[_0x4d7e61(0x273)]['y'] + '\x20' + _0x5acc96['position']['z'] + '\x0a', _0x1e31ff += 0x1;
+  for (let _0x26501b of configuration_space[_0x4d7e61(0x138)]) 0x2 === configuration_space[_0x4d7e61(0x285)](_0x26501b) && (_0x536a59 += '#\x20face\x20' + JSON[_0x4d7e61(0x254)](_0x26501b) + '\x0a', _0x536a59 += 'f', _0x536a59 += '\x20' + str(configuration_space['graphLayout'][_0x4d7e61(0x14c)]([_0x26501b[0x0][0x0], _0x26501b[0x1][0x0]])[_0x4d7e61(0x137)]), _0x536a59 += '\x20' + str(configuration_space['graphLayout']['getNode']([_0x26501b[0x0][0x0], _0x26501b[0x1][0x1]])[_0x4d7e61(0x137)]), _0x536a59 += '\x20' + str(configuration_space['graphLayout'][_0x4d7e61(0x14c)]([_0x26501b[0x0][0x1], _0x26501b[0x1][0x1]])[_0x4d7e61(0x137)]), _0x536a59 += '\x20' + str(configuration_space[_0x4d7e61(0x105)][_0x4d7e61(0x14c)]([_0x26501b[0x0][0x1], _0x26501b[0x1][0x0]])[_0x4d7e61(0x137)]), _0x536a59 += '\x0a');
+  return _0x536a59;
+}
