@@ -2,6 +2,7 @@
 * give things better names
   - firstcoordinate
   - coh2
+* make sure red dot matches red edge, resp.
 * add individual neighborhood forces to nodes depending on labels
 * enable user to move node freely around while the rest is frozen
 * add dots
@@ -19,6 +20,7 @@
 * catalog of nice graphs
 * fix the font
 * toggle 2D/3D in the space
+* fix mouseReleased outside of canvas
 
 DONE
 

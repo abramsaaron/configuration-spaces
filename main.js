@@ -4,13 +4,14 @@ let graphicsGraph, graphicsConfigSpace;
 let configuration_space, configuration_spaceLayout;
 let easycam, cameraState;
 let font;
-const granularity = 40;
+let robotAhue = 0;
+let robotBhue = 60;
 
 let temperature = 1.0;
 let cold = 0.001;
 let coolingRate = 0.03;
 
-let viewingStyle = "single";
+let viewingStyle = "dual";
 
 // For the GUI
 
@@ -22,11 +23,10 @@ let parameters = {};
 let running = true;
 let takeScreenshotGraph = !true;
 let takeScreenshotConfigSpace = !true;
-let showText = !true;
 let verbose = !true;
 let forcesActive = true;
-let dotAactive = true;
-let dotBactive = true;
+let robotAmoving = true;
+let robotBmoving = true;
 
 // Setup
 
@@ -37,13 +37,7 @@ function preload() {
 function setup() {
   noCanvas();
   setAttributes("antialias", true);
-
-  initGraphicsGraph(0, windowHeight);
-  initGraphicsConfigSpace(windowWidth, windowHeight);
-
-  parameters.graphType = "C(7)";
-  parameters.distinguishDots = !true;
-
+  initParameters();
   init();
 }
 
@@ -77,23 +71,40 @@ function initGraphicsConfigSpace(w, h) {
 }
 
 function init() {
+  initView(viewingStyle);
   initGraph(parameters.graphType);
+  initGUI();
 }
 
 function toggleView() {
-  if (verbose) print("toggleView");
-  resetCanvases();
-
   if (viewingStyle === "dual") {
-    viewingStyle = "single";
-    initGraphicsConfigSpace(windowWidth, windowHeight);
+    initView("single");
   } else if (viewingStyle === "single") {
-    viewingStyle = "dual";
+    initView("dual");
+  }
+  init();
+}
+
+function initView(style) {
+  viewingStyle = style;
+  resetCanvases();
+  if (style === "single") {
+    initGraphicsGraph(0, windowHeight);
+    initGraphicsConfigSpace(windowWidth, windowHeight);
+  } else if (viewingStyle === "dual") {
     initGraphicsGraph(windowWidth / 2, windowHeight);
     initGraphicsConfigSpace(windowWidth / 2, windowHeight);
   }
 
-  init();
+  if (parameters.lights) {
+    // Lights for graph
+    graphicsGraph.ambientLight(0, 0, 255);
+    graphicsGraph.directionalLight(0, 0, 255, -1, 0, 0);
+
+    // Lights for config space
+    graphicsConfigSpace.ambientLight(0, 0, 220);
+    graphicsConfigSpace.directionalLight(0, 0, 255, -1, 0, 0);
+  }
 }
 
 // Draw loop
@@ -101,9 +112,12 @@ function toggleView() {
 function draw() {
   if (temperature > cold) {
     tick();
-    graph.moveDots();
     graph.update();
     configuration_space.update();
+  }
+
+  if (parameters.moveDotsRandomly) {
+    graph.moveRobots();
   }
 
   graph.show();
@@ -168,16 +182,32 @@ function setupEasyCam(g) {
   g.easycam = easycam;
 }
 
+// Parameters
+
+function initParameters() {
+  parameters.graphType = "C(7)";
+  parameters.distinguishDots = !true;
+  parameters.gridOn = !true;
+  parameters.squareOn = true;
+  parameters.granularity = 40;
+  parameters.showText = !true;
+  parameters.sphereView = true;
+  parameters.lights = true;
+  parameters.moveDotsRandomly = true;
+  parameters.robotSpeed = 0.0005;
+}
+
 // GUI setup
 
 function initGUI() {
-  if (gui != null) gui.destroy();
+  if (gui !== undefined) gui.destroy();
 
   gui = new dat.GUI({
     autoPlace: false,
   });
 
-  let globalUI = gui.addFolder("Global");
+  // Choose graph
+  let globalUI = gui.addFolder("Choose graph");
   let graphPicker = globalUI.add(parameters, "graphType", [
     "K(1,2)",
     "K(1,3)",
@@ -199,15 +229,32 @@ function initGUI() {
     "C(7)",
   ]);
   globalUI.open();
-
   graphPicker.onFinishChange(function (value) {
+    initView(viewingStyle);
     initGraph(value);
   });
 
+  // Visual
+  let visualGUI = gui.addFolder("Visuals");
+  visualGUI.add(parameters, "showText");
+  visualGUI.add(graph.graphLayout, "nodeSize", 0, 40);
+  visualGUI.add(graph.graphLayout, "edgeWidth", 0, 10);
+  visualGUI.add(configuration_space.graphLayout, "nodeSize", 0, 40);
+  visualGUI.add(configuration_space.graphLayout, "edgeWidth", 0, 10);
+  visualGUI.add(parameters, "granularity", 0, 40).step(1);
+  visualGUI.add(parameters, "gridOn");
+  visualGUI.add(parameters, "squareOn");
+  visualGUI.add(parameters, "sphereView");
+  let lightsChange = visualGUI.add(parameters, "lights");
+  lightsChange.onFinishChange(function (value) {
+    init();
+  });
+  visualGUI.add(parameters, "moveDotsRandomly");
+  visualGUI.add(parameters, "robotSpeed", 0, 0.1);
+  visualGUI.open();
+
+  // Graph
   let graphGUI = gui.addFolder("Graph");
-  graphGUI.add(graph.graphLayout, "edgeWidth", 0, 10);
-  graphGUI.add(graph.graphLayout, "nodeSize", 0, 40);
-  graphGUI.add(graph.graphLayout, "nodeReach", 0, 1000);
   graphGUI.add(graph.graphLayout, "edgelength", 0, 200);
   graphGUI.add(graph.graphLayout, "maxspeed", 0, 1000);
   graphGUI.add(graph.graphLayout, "neighborattraction", 0, 0.1);
@@ -216,11 +263,10 @@ function initGUI() {
   graphGUI.add(graph.graphLayout, "separationFactor", 0, 3);
   graphGUI.add(graph.graphLayout, "centerAttraction");
   graphGUI.add(graph.graphLayout, "moveToCenter");
-  graphGUI.open();
+  // graphGUI.open();
 
+  // Configuration Space
   let configGUI = gui.addFolder("Configuration Space");
-  configGUI.add(configuration_space.graphLayout, "edgeWidth", 0, 10);
-  configGUI.add(configuration_space.graphLayout, "nodeSize", 0, 40);
   configGUI.add(
     configuration_space.graphLayout,
     "firstCoordinateForce",
@@ -233,8 +279,6 @@ function initGUI() {
     1,
     1000
   );
-  configGUI.add(configuration_space.graphLayout, "nodeSize", 0, 40);
-  configGUI.add(configuration_space.graphLayout, "nodeReach", 0, 1000);
   configGUI.add(configuration_space.graphLayout, "edgelength", 0, 200);
   configGUI.add(configuration_space.graphLayout, "maxspeed", 0, 1000);
   configGUI.add(configuration_space.graphLayout, "neighborattraction", 0, 0.1);
@@ -243,8 +287,9 @@ function initGUI() {
   configGUI.add(configuration_space.graphLayout, "separationFactor", 0, 3);
   configGUI.add(configuration_space.graphLayout, "centerAttraction");
   configGUI.add(configuration_space.graphLayout, "moveToCenter");
-  configGUI.open();
+  // configGUI.open();
 
+  // Place in DOM
   var customContainer = document.getElementById("gui");
   customContainer.appendChild(gui.domElement);
 }
@@ -270,25 +315,20 @@ function initGraph(graphType) {
     }
   }
 
-  graphicsGraph.ambientLight(0, 0, 255);
-  graphicsConfigSpace.directionalLight(0, 0, 255, -1, 0, 0);
 
   graph.createGraphLayout(graphicsGraph, true);
   configuration_space = new Configuration_space(graph, 2);
   configuration_space.createGraphLayout(graphicsConfigSpace, true);
 
   if (verbose) print(configuration_space);
-  initGUI();
 }
 
 // Main classes
 
 class Graph {
-  constructor(nodes, edges) {
-    this.nodes = nodes;
-    this.edges = edges;
-    this.dotA = new Dot(this, this.nodes[0]);
-    this.dotB = new Dot(this, this.nodes[1]);
+  constructor(nodeLabels, edgeLabels) {
+    this.nodes = nodeLabels;
+    this.edges = edgeLabels;
   }
 
   update() {
@@ -299,37 +339,40 @@ class Graph {
     this.graphLayout.show();
   }
 
-  getDots() {
-    return [this.dotA, this.dotB];
+  getRobots() {
+    return [this.robotA, this.robotB];
   }
 
-  otherDot(dot) {
-    if (this.dotA === dot) return this.dotB;
-    else return this.dotA;
+  otherRobot(robot) {
+    if (this.robotA === robot) return this.robotB;
+    else return this.robotA;
   }
 
-  moveDots() {
-    let amount = 0.04;
-    if (dotAactive) {
-      this.dotA.move(amount);
+  moveRobots() {
+    if (robotAmoving) {
+      this.robotA.move(parameters.robotSpeed);
     }
-    if (dotBactive) {
-      this.dotB.move(amount);
+    if (robotBmoving) {
+      this.robotB.move(parameters.robotSpeed);
     }
   }
 
   createGraphLayout(graphics, layout3D) {
     this.graphLayout = new GraphLayout(this, graphics, layout3D);
+    this.graphLayout.showRobots = true;
 
-    for (let node of this.nodes) {
-      this.graphLayout.addNode(node);
+    for (let nodeLabel of this.nodes) {
+      this.graphLayout.addNode(nodeLabel);
     }
 
-    for (let edge of this.edges) {
-      let nodeFrom = this.graphLayout.getNode(edge[0]);
-      let nodeTo = this.graphLayout.getNode(edge[1]);
-      this.graphLayout.addEdge(edge, nodeFrom, nodeTo);
+    for (let edgeLabel of this.edges) {
+      let nodeFrom = this.graphLayout.getNode(edgeLabel[0]);
+      let nodeTo = this.graphLayout.getNode(edgeLabel[1]);
+      this.graphLayout.addEdge(edgeLabel, nodeFrom, nodeTo);
     }
+
+    this.robotA = new Robot(this, this.graphLayout.nodes[0], robotAhue);
+    this.robotB = new Robot(this, this.graphLayout.nodes[1], robotBhue);
 
     this.graphLayout.initlayout();
   }
@@ -342,8 +385,8 @@ class Configuration_space {
     // todo: generalize and use dimension
     let possible_states = cartesianProductOf(this.positions, this.positions);
     this.states = possible_states.filter(is_state);
-    if (verbose) print("States:");
-    if (verbose) print(this.states);
+    if (!verbose) print("States:");
+    if (!verbose) print(this.states);
   }
 
   update() {
@@ -354,7 +397,7 @@ class Configuration_space {
     this.graphLayout.show();
   }
 
-  getDots() {
+  getRobots() {
     return [];
   }
 
@@ -370,16 +413,20 @@ class Configuration_space {
 
   createGraphLayout(graphics, layout3D) {
     this.graphLayout = new GraphLayout(this, graphics, layout3D);
+    this.graphLayout.showConfiguration = true;
+
     let states_0 = this.getStates(0);
     let states_1 = this.getStates(1);
     let states_2 = this.getStates(2);
 
+    // Create nodes
     for (let state of states_0) {
       if (verbose) print("state_1:");
       if (verbose) print(state);
       this.graphLayout.addNode(state);
     }
 
+    // Create edges
     for (let state of states_1) {
       if (verbose) print("state_1:");
       if (verbose) print(state);
@@ -401,6 +448,7 @@ class Configuration_space {
       }
     }
 
+    // Create squares
     for (let state of states_2) {
       if (verbose) print("state_2:");
       if (verbose) print(state);
@@ -410,6 +458,9 @@ class Configuration_space {
       let edgeBto = this.graphLayout.getEdge(state[0], state[1][1]);
       this.graphLayout.addSquare(state, edgeAfrom, edgeAto, edgeBfrom, edgeBto);
     }
+
+    // This requires graph.createGraphLayout to have been called.
+    this.graphLayout.configuration = new Configuration(this.graphLayout, graph.robotA, graph.robotB);
 
     this.graphLayout.initlayout();
   }
@@ -429,7 +480,6 @@ class GraphLayout {
     this.nodeBorder = true;
     this.nodeBorderWidth = 0.05;
     this.showNodes = true;
-    this.nodeReach = 300; // 1000;
 
     this.edges = [];
     this.showEdges = true;
@@ -439,8 +489,7 @@ class GraphLayout {
     this.squares = [];
     this.showSquares = true;
 
-    this.dots = [];
-    this.showDots = true;
+    this.showRobots = true;
 
     this.centerAttraction = !true;
     this.moveToCenter = true;
@@ -449,11 +498,6 @@ class GraphLayout {
     this.secondCoordinateForce = 100;
 
     this.center = createVector(0, 0, 0);
-
-    // if (this.layout3D) {
-    // } else {
-    //   this.center = createVector(this.graphics.width / 2, this.graphics.height / 2);
-    // }
 
     this.heat = 1.0;
     this.coolDown = 0.01;
@@ -530,18 +574,19 @@ class GraphLayout {
       }
     }
 
-    if (this.showDots) {
-      for (let dot of this.source.getDots()) {
-        let nodeFrom = this.getNode(dot.nodeFrom);
-        let nodeTo = this.getNode(dot.nodeTo);
-        let amount = this.getNode(dot.amount);
+    if (this.showRobots) {
+      for (let robot of this.source.getRobots()) {
         let position = p5.Vector.lerp(
-          nodeFrom.position,
-          nodeTo.position,
-          amount
+          robot.nodeFrom.position,
+          robot.nodeTo.position,
+          robot.amount
         );
-        dot.show(this, position);
+        robot.show(position);
       }
+    }
+
+    if (this.showConfiguration) {
+      this.configuration.show();
     }
 
     this.counter++;
@@ -558,10 +603,6 @@ class GraphLayout {
       }
     }
   }
-
-  // windowResized() {
-  //   resizeCanvas(window.innerWidth, window.innerHeight);
-  // }
 
   mousePressed() {
     // print(mouseX);
@@ -606,6 +647,20 @@ class GraphLayout {
     }
   }
 
+  getSquare(labelA, labelB) {
+    if (verbose) print("getSquare: ");
+    if (verbose) print(labelA);
+    if (verbose) print(labelB);
+    for (let square of this.squares) {
+      print(square.label);
+      if (arraysEqual([labelA, labelB], square.label)) {
+        if (verbose) print("FOUND!");
+        if (verbose) print(square);
+        return square;
+      }
+    }
+  }
+
   addNode(label) {
     if (verbose) print("adding node " + label);
     let r = 1000;
@@ -629,14 +684,14 @@ class GraphLayout {
     nodeFrom.connectTo(nodeTo);
   }
 
-  addSquare(label, nodeAfrom, nodeAto, nodeBfrom, nodeBto) {
+  addSquare(label, edgeAfrom, edgeAto, edgeBfrom, edgeBto) {
     let square = new Square(
       this,
       label,
-      nodeAfrom,
-      nodeAto,
-      nodeBfrom,
-      nodeBto
+      edgeAfrom,
+      edgeAto,
+      edgeBfrom,
+      edgeBto
     );
     this.squares.push(square);
   }
@@ -769,44 +824,53 @@ class Node {
 
     // Draw node
     if (this.graphlayout.layout3D) {
-      let rotation = this.graphics.easycam.getRotation();
-      var rotXYZ = QuaternionToEuler(
-        rotation[0],
-        rotation[1],
-        rotation[2],
-        rotation[3]
-      );
       this.graphics.push();
       this.graphics.translate(
         this.position.x,
         this.position.y,
         this.position.z
       );
-      // this.graphics.rotateX(-rotXYZ[0]);
-      // this.graphics.rotateY(-rotXYZ[1]);
-      // this.graphics.rotateZ(-rotXYZ[2]);
-      // this.graphics.translate(0, 0, 0.5 * thisSize);
+
       if (this.active) {
         this.graphics.fill(0, 255, 255);
       } else {
-        this.graphics.fill(255);
+        this.graphics.fill(0, 0, 190);
       }
-      // this.graphics.ellipse(0, 0, thisSize, thisSize);
-      // this.graphics.stroke(0);
-      // this.graphics.strokeWeight(0.1);
-      this.graphics.sphere(0.5 * thisSize, 10, 10);
+
+      if (parameters.sphereView) {
+        // Two last arguments are sphere detail.
+        this.graphics.sphere(0.5 * thisSize, 10, 10);
+      } else {
+        // Rotate such that ellipse faces front
+        let rotation = this.graphics.easycam.getRotation();
+        let rotXYZ = QuaternionToEuler(
+          rotation[0],
+          rotation[1],
+          rotation[2],
+          rotation[3]
+        );
+        this.graphics.rotateX(-rotXYZ[0]);
+        this.graphics.rotateY(-rotXYZ[1]);
+        this.graphics.rotateZ(-rotXYZ[2]);
+        // Draw the ellipse a little in front
+        this.graphics.translate(0, 0, 0.5 * thisSize);
+        this.graphics.stroke(0);
+        this.graphics.strokeWeight(1.0);
+        this.graphics.ellipse(0, 0, thisSize, thisSize);
+      }
       this.graphics.pop();
     }
 
     // Draw text
-    if (showText) {
+    if (parameters.showText) {
       this.graphics.fill(0, 0, 0);
       this.graphics.textAlign(CENTER, CENTER);
       this.graphics.textFont(font);
       this.graphics.textSize(30);
       if (this.graphlayout.layout3D) {
+        // 3D layout
         let rotation = this.graphics.easycam.getRotation();
-        var rotXYZ = QuaternionToEuler(
+        let rotXYZ = QuaternionToEuler(
           rotation[0],
           rotation[1],
           rotation[2],
@@ -825,6 +889,7 @@ class Node {
         this.graphics.text(this.labelText, 0, 0);
         this.graphics.pop();
       } else {
+        // 2D layout
         this.graphics.push();
         this.graphics.translate(
           this.position.x,
@@ -850,41 +915,56 @@ class Edge {
     this.nodeFrom = nodeFrom;
     this.nodeTo = nodeTo;
     this.subPoints = [];
-    if (this.nodeFrom.label[0] === this.nodeTo.label[0]) {
-      this.coordinate = 0;
-    } else if (this.nodeFrom.label[1] === this.nodeTo.label[1]) {
-      this.coordinate = 1;
+    if (Array.isArray(this.nodeFrom.label) && Array.isArray(this.nodeTo.label)) {
+      if (this.nodeFrom.label[0] === this.nodeTo.label[0]) {
+        this.coordinate = 0;
+      } else if (this.nodeFrom.label[1] === this.nodeTo.label[1]) {
+        this.coordinate = 1;
+      } else {
+        print("ERRRORR");
+      }
     } else {
-      print("ERRRORR");
+      this.coordinate = -1;
     }
-    for (let n = 1; n < granularity; n++) {
+
+    for (let n = 1; n < parameters.granularity; n++) {
       this.subPoints[n] = p5.Vector.lerp(
         this.nodeFrom.position,
         this.nodeTo.position,
-        (1.0 * n) / granularity
+        (1.0 * n) / parameters.granularity
       );
     }
+  }
+
+  amountAlong(amount) {
+    return p5.Vector.lerp(this.nodeFrom.position, this.nodeTo.position, amount);
   }
 
   connectedTo(node) {
     return node === this.nodeFrom || node === this.nodeTo;
   }
 
+  getPosition(amount) {
+    return p5.Vector.lerp(this.nodeFrom.position, this.nodeTo.position, amount);
+  }
+
   show() {
-    if (this.coordinate === 0) {
-      this.graphics.stroke(0, 200, 200, 255);
+    if (this.coordinate === -1) {
+      this.graphics.stroke(0, 0, 0, 255);
     } else if (this.coordinate === 1) {
+      this.graphics.stroke(0, 200, 200, 255);
+    } else if (this.coordinate === 0) {
       this.graphics.stroke(85, 200, 200, 255);
     }
 
     this.graphics.strokeWeight(this.graphlayout.edgeWidth);
     lineV(this.graphlayout, this.nodeFrom.position, this.nodeTo.position);
 
-    for (let n = 1; n < granularity; n++) {
+    for (let n = 1; n < parameters.granularity; n++) {
       this.subPoints[n] = p5.Vector.lerp(
         this.nodeFrom.position,
         this.nodeTo.position,
-        (1.0 * n) / granularity
+        (1.0 * n) / parameters.granularity
       );
       // this.graphics.push();
       // this.graphics.translate(
@@ -901,15 +981,17 @@ class Edge {
 }
 
 class Square {
-  constructor(graphlayout, label, _edgeAfrom, _edgeAto, _edgeBfrom, _edgeBto) {
+  constructor(graphlayout, label, edgeAfrom, edgeAto, edgeBfrom, edgeBto) {
     this.graphlayout = graphlayout;
     this.graphics = graphlayout.graphics;
     this.label = label;
-    this.edgeAfrom = _edgeAfrom;
-    this.edgeAto = _edgeAto;
-    this.edgeBfrom = _edgeBfrom;
-    this.edgeBto = _edgeBto;
-    this.hue = random(0, 255);
+    // edgeA refers to the first edge in the graph
+    // edgeB refers to the second edge in the graph
+    this.edgeAfrom = edgeAfrom;
+    this.edgeAto = edgeAto;
+    this.edgeBfrom = edgeBfrom;
+    this.edgeBto = edgeBto;
+    this.hue = random(0, 30);
     this.subPoints = [];
 
     // this.edgeAfrom.nodeFrom.connectToDiagonally(this.edgeAto.nodeTo);
@@ -921,120 +1003,224 @@ class Square {
     if (verbose) print(this);
   }
 
+  getPosition(amountA, amountB) {
+    // *-->--- edgeAfrom -->---*
+    // |                       |
+    // |                       |
+    // | edgeBfrom             | edgeBto
+    // v                       v
+    // |                       |
+    // |                       |
+    // |                       |
+    // *--->-- edgeAto   --->--*
+
+    let X = edgeAfrom.amountAlong(amountA);
+    let Y = edgeAto.amountAlong(amountA);
+    return p5.Vector.lerp(X, Y, amountB);
+  }
+
   show() {
-    this.graphics.stroke(this.hue, 255, 0, 200);
-    this.graphics.strokeWeight(1.0);
-    for (let n = 1; n < granularity; n++) {
-      let a = this.edgeAfrom.subPoints[n];
-      let b = this.edgeAto.subPoints[n];
-      this.graphics.line(a.x, a.y, a.z, b.x, b.y, b.z);
-    }
-    for (let n = 1; n < granularity; n++) {
-      let a = this.edgeBfrom.subPoints[n];
-      let b = this.edgeBto.subPoints[n];
-      this.graphics.line(a.x, a.y, a.z, b.x, b.y, b.z);
+    if (parameters.gridOn) {
+      this.graphics.stroke(this.hue, 255, 255, 255);
+      this.graphics.strokeWeight(1.0);
+      for (let n = 1; n < parameters.granularity; n++) {
+        let a = this.edgeAfrom.subPoints[n];
+        let b = this.edgeAto.subPoints[n];
+        this.graphics.stroke(0, 200, 200, 255);
+        this.graphics.line(a.x, a.y, a.z, b.x, b.y, b.z);
+      }
+      for (let n = 1; n < parameters.granularity; n++) {
+        let a = this.edgeBfrom.subPoints[n];
+        let b = this.edgeBto.subPoints[n];
+        this.graphics.stroke(85, 200, 200, 255);
+        this.graphics.line(a.x, a.y, a.z, b.x, b.y, b.z);
+      }
     }
 
-    // this.graphics.noStroke();
-    // this.graphics.fill(this.hue, 255, 255, 200);
-    // this.graphics.beginShape();
-    // this.graphics.vertex(
-    //   this.edgeAfrom.nodeFrom.position.x,
-    //   this.edgeAfrom.nodeFrom.position.y,
-    //   this.edgeAfrom.nodeFrom.position.z
-    // );
-    // this.graphics.vertex(
-    //   this.edgeAfrom.nodeTo.position.x,
-    //   this.edgeAfrom.nodeTo.position.y,
-    //   this.edgeAfrom.nodeTo.position.z
-    // );
-    // this.graphics.vertex(
-    //   this.edgeAto.nodeTo.position.x,
-    //   this.edgeAto.nodeTo.position.y,
-    //   this.edgeAto.nodeTo.position.z
-    // );
-    // this.graphics.vertex(
-    //   this.edgeAto.nodeFrom.position.x,
-    //   this.edgeAto.nodeFrom.position.y,
-    //   this.edgeAto.nodeFrom.position.z
-    // );
-    // this.graphics.endShape(CLOSE);
+    if (parameters.squareOn) {
+      this.graphics.noStroke();
+      this.graphics.fill(this.hue, 255, 255, 200);
+      this.graphics.beginShape();
+      this.graphics.vertex(
+        this.edgeAfrom.nodeFrom.position.x,
+        this.edgeAfrom.nodeFrom.position.y,
+        this.edgeAfrom.nodeFrom.position.z
+      );
+      this.graphics.vertex(
+        this.edgeAfrom.nodeTo.position.x,
+        this.edgeAfrom.nodeTo.position.y,
+        this.edgeAfrom.nodeTo.position.z
+      );
+      this.graphics.vertex(
+        this.edgeAto.nodeTo.position.x,
+        this.edgeAto.nodeTo.position.y,
+        this.edgeAto.nodeTo.position.z
+      );
+      this.graphics.vertex(
+        this.edgeAto.nodeFrom.position.x,
+        this.edgeAto.nodeFrom.position.y,
+        this.edgeAto.nodeFrom.position.z
+      );
+      this.graphics.endShape(CLOSE);
+    }
   }
 }
 
-class Dot {
-  constructor(graph, node) {
+class Robot {
+  constructor(graph, node, hue) {
+    // The graph is the abstract one with just labels.s
     this.graph = graph;
+    // The node is from the graphLayout, because we then have neighbors.
     this.nodeFrom = node;
-    this.nodeTo = node; //pickRandomNeighbor();
+    this.nodeTo = node; // Initial placement. //pickRandomNeighbor();
     this.amount = 0;
+    this.hue = hue;
   }
 
-  occupying() {
+  occupyingNodes() {
     return [this.nodeFrom, this.nodeTo];
   }
 
-  otherDot() {
-    return graph.otherDot(this);
+  getRandomNeighbor() {
+    let candidates = this.nodeFrom.neighbors.filter(x => !this.graph.otherRobot(this).occupyingNodes().includes(x));
+    if (candidates.length > 0) {
+      return candidates[floor(random(candidates.length))];
+    } else {
+      return false;
+    }
   }
-
-  // getRandomNeighbor() {
-  //   let candidates = this.nodeFrom.neighbors.filter(x => !this.otherDot().includes(x));
-  //   if (candidates.length > 0) {
-  //     return candidates[floor(random(candidates.length))];
-  //   } else {
-  //     return false;
-  //   }
-  // }
 
   move(amount) {
-    // if (this.amount === 0) {
-    //   // let nextNode = this.getRandomNeighbor();
-    //   if (nextNode) {
-    //     this.nodeTo = nextNode;
-    //   } else {
-    //     return false;
-    //   }
-    // }
-    // this.amount += amount;
-    // if (this.amount >= 1) {
-    //   this.amount = 0;
-    //   this.nodeFrom = nodeTo;
-    // }
+    if (this.amount === 0) {
+      let nextNode = this.getRandomNeighbor();
+      if (nextNode) {
+        this.nodeTo = nextNode;
+      } else {
+        return false;
+      }
+    }
+    this.amount += amount;
+    if (this.amount >= 1) {
+      this.amount = 0;
+      this.nodeFrom = this.nodeTo;
+    }
   }
 
-  show(graphlayout, position) {
+  show(position) {
     if (this.nodeBorder) {
-      graphlayout.graphics.stroke(150);
-      graphlayout.graphics.strokeWeight(
-        v.nodeSize * graphlayout.nodeBorderWidth
+      this.graph.graphLayout.graphics.stroke(150);
+      this.graph.graphLayout.graphics.strokeWeight(
+        this.graph.graphLayout.nodeSize * this.graphLayout.nodeBorderWidth
       );
     } else {
-      graphlayout.graphics.noStroke();
+      this.graph.graphLayout.graphics.noStroke();
     }
 
-    let thisSize = graphlayout.nodeSize;
+    let thisSize = this.graph.graphLayout.nodeSize;
+    this.graph.graphLayout.graphics.fill(this.hue, 200, 200);
 
     // Draw node
-    if (graphlayout.layout3D) {
-      let rotation = graphlayout.graphics.easycam.getRotation();
-      var rotXYZ = QuaternionToEuler(
+    if (this.graph.graphLayout.layout3D) {
+      this.graph.graphLayout.graphics.push();
+      this.graph.graphLayout.graphics.translate(position.x, position.y, position.z);
+      if (parameters.sphereView) {
+        this.graph.graphLayout.graphics.sphere(0.55 * thisSize, 10, 10);
+      } else {
+        let rotation = this.graph.graphLayout.graphics.easycam.getRotation();
+        let rotXYZ = QuaternionToEuler(
+          rotation[0],
+          rotation[1],
+          rotation[2],
+          rotation[3]
+        );
+        this.graph.graphLayout.graphics.rotateX(-rotXYZ[0]);
+        this.graph.graphLayout.graphics.rotateY(-rotXYZ[1]);
+        this.graph.graphLayout.graphics.rotateZ(-rotXYZ[2]);
+        this.graph.graphLayout.graphics.translate(0, 0, 0.5 * thisSize);
+        this.graph.graphLayout.graphics.ellipse(0, 0, thisSize, thisSize);
+      }
+      this.graph.graphLayout.graphics.pop();
+    }
+  }
+}
+
+class Configuration {
+  constructor(graphLayout, robotA, robotB) {
+    print(graphLayout);
+    this.graphLayout = graphLayout;
+    this.robotA = robotA;
+    this.robotB = robotB;
+  }
+
+  show() {
+    let thisSize = this.graphLayout.nodeSize;
+    let position;
+
+    if (this.robotA.amount === 0 && this.robotB.amount === 0) {
+      let stateLabel = [this.robotA.nodeFrom.label, this.robotB.nodeFrom.label];
+      let state = this.graphLayout.getNode(stateLabel);
+      position = state.position;
+    } else if (this.robotA.amount > 0 && this.robotB.amount === 0) {
+      let stateFromLabel = [this.robotA.nodeFrom.label, this.robotB.nodeFrom.label];
+      let stateToLabel = [this.robotA.nodeTo.label, this.robotB.nodeFrom.label];
+      let stateFrom = this.graphLayout.getNode(stateFromLabel);
+      let stateTo = this.graphLayout.getNode(stateToLabel);
+      position = p5.Vector.lerp(stateFrom.position, stateTo.position, this.robotA.amount);
+
+    } else if (this.robotA.amount === 0 && this.robotB.amount > 0) {
+      let stateFromLabel = [this.robotA.nodeFrom.label, this.robotB.nodeFrom.label];
+      let stateToLabel = [this.robotA.nodeFrom.label, this.robotB.nodeTo.label];
+      let stateFrom = this.graphLayout.getNode(stateFromLabel);
+      let stateTo = this.graphLayout.getNode(stateToLabel);
+      position = p5.Vector.lerp(stateFrom.position, stateTo.position, this.robotB.amount);
+    } else {
+      // (robotA.nodeFrom, robotB.nodeFrom)      edgeAfrom          (robotA.nodeTo, robotB.nodeFrom)
+      //                                  
+      //                             *-->---X------------>---*
+      //                             |      |                |
+      //                             |      |                |
+      //       edgeBfrom             |      |                |       edgeBto
+      //                             v      |                v
+      //                             |      |                |
+      //                             |      Y                |
+      //                             |      |                |
+      //                             *--->--X------------->--*
+      //                                  
+      // (robotA.nodeFrom, robotB.nodeTo)         edgeAto         (robotA.nodeTo, robotB.nodeTo)
+
+      let amountA = this.robotA.amount;
+      let amountB = this.robotB.amount;
+      let topLeft = this.graphLayout.getNode([this.robotA.nodeFrom.label, this.robotB.nodeFrom.label]).position;
+      let topRight = this.graphLayout.getNode([this.robotA.nodeTo.label, this.robotB.nodeFrom.label]).position;
+      let botLeft = this.graphLayout.getNode([this.robotA.nodeFrom.label, this.robotB.nodeTo.label]).position;
+      let botRight = this.graphLayout.getNode([this.robotA.nodeTo.label, this.robotB.nodeTo.label]).position;
+      let topX = p5.Vector.lerp(topLeft, topRight, amountA);
+      let botX = p5.Vector.lerp(botLeft, botRight, amountA);
+      position = p5.Vector.lerp(topX, botX, amountB);
+    }
+
+    this.graphLayout.graphics.push();
+    this.graphLayout.graphics.translate(position.x, position.y, position.z);
+    this.graphLayout.graphics.fill(180, 255, 255);
+    this.graphLayout.graphics.noStroke();
+
+    if (parameters.sphereView) {
+      this.graphLayout.graphics.sphere(0.55 * thisSize, 10, 10);
+    } else {
+      let rotation = this.graphLayout.graphics.easycam.getRotation();
+      let rotXYZ = QuaternionToEuler(
         rotation[0],
         rotation[1],
         rotation[2],
         rotation[3]
       );
-      graphlayout.graphics.push();
-      graphlayout.graphics.translate(position.x, position.y, position.z);
-      graphlayout.graphics.rotateX(-rotXYZ[0]);
-      graphlayout.graphics.rotateY(-rotXYZ[1]);
-      graphlayout.graphics.rotateZ(-rotXYZ[2]);
-      graphlayout.graphics.translate(0, 0, 0.5 * thisSize);
-      graphlayout.graphics.fill(170, 255, 255);
-
-      graphlayout.graphics.ellipse(0, 0, thisSize, thisSize);
-      graphlayout.graphics.pop();
+      this.graphLayout.graphics.rotateX(-rotXYZ[0]);
+      this.graphLayout.graphics.rotateY(-rotXYZ[1]);
+      this.graphLayout.graphics.rotateZ(-rotXYZ[2]);
+      this.graphLayout.graphics.translate(0, 0, 0.5 * thisSize);
+      this.graphLayout.graphics.ellipse(0, 0, thisSize, thisSize);
     }
+    this.graphLayout.graphics.pop();
   }
 }
 
@@ -1165,10 +1351,10 @@ function keyPressed() {
   if (key === "r") init();
   else if (key === " ") running = !running;
   else if (key === "f") forcesActive = !forcesActive;
-  else if (key === "t") showText = !showText;
+  else if (key === "t") parameters.showText = !parameters.showText;
   else if (key === "v") toggleView();
-  else if (key === "a") dotAactive = !dotAactive;
-  else if (key === "b") dotBactive = !dotBactive;
+  else if (key === "a") robotAmoving = !robotAmoving;
+  else if (key === "b") robotBmoving = !robotBmoving;
   else if (key === "s") takeScreenshotGraph = !takeScreenshotGraph;
   else if (key === "S") takeScreenshotConfigSpace = !takeScreenshotConfigSpace;
   else if (key === "m") {
@@ -1245,6 +1431,24 @@ function QuaternionToEuler(q0, q1, q2, q3) {
   return [x, y, z];
 }
 
+function cartesianProductOf() {
+  return Array.prototype.reduce.call(
+    arguments,
+    function (a, b) {
+      var ret = [];
+      a.forEach(function (a) {
+        b.forEach(function (b) {
+          ret.push(a.concat([b]));
+        });
+      });
+      return ret;
+    },
+    [
+      []
+    ]
+  );
+}
+
 // Strings
 
 function labelToString(L) {
@@ -1279,28 +1483,14 @@ const flatten = (arr) => [].concat.apply([], arr);
 const product = (...sets) =>
   sets.reduce(
     (acc, set) => flatten(acc.map((x) => set.map((y) => [...x, y]))),
-    [[]]
+    [
+      []
+    ]
   );
 
 function arraysEqual(a1, a2) {
   /* WARNING: arrays must not contain {objects} or behavior may be undefined */
   return JSON.stringify(a1) == JSON.stringify(a2);
-}
-
-function cartesianProductOf() {
-  return Array.prototype.reduce.call(
-    arguments,
-    function (a, b) {
-      var ret = [];
-      a.forEach(function (a) {
-        b.forEach(function (b) {
-          ret.push(a.concat([b]));
-        });
-      });
-      return ret;
-    },
-    [[]]
-  );
 }
 
 function is_state(p) {
