@@ -1,0 +1,62 @@
+{
+  "name": "configurationspaceexplorer01",
+  "description": "Configuration Space Explorer",
+  "version": "1.0.0",
+  "author": "Roger Antonsen and Aaron Abrams",
+  "private": true,
+  "scripts": {
+    "listen": "NODE_ENV=development TAILWIND_MODE=watch npm-run-all --parallel php:listen css:listen js:listen server",
+    "build": "NODE_ENV=production run-s php:terser css:build js:build",
+
+    "php": "php -S localhost:3001 -t htdocs",
+    "open": "open-cli http://localhost:3001 -- 'Firefox'",
+    "server": "npm-run-all --parallel php open",
+
+    "copy:all": "run-s copy:p5 copy:lilgui",
+    "copy:p5": "cp node_modules/p5/lib/p5.min.js source/lib/0-p5.min.js",
+    "copy:lilgui": "cp node_modules/lil-gui/dist/lil-gui.umd.min.js source/lib/lil-gui.umd.min.js",
+        
+    "css:build": "postcss --verbose source/css/styles.css --output htdocs/styles.css",
+    "css:listen": "npm-run-all --parallel css:styles:listen css:tailwind:listen",
+    "css:styles:listen": "postcss --verbose source/css/styles.css --output htdocs/styles.css --watch",
+    "css:tailwind:listen": "onchange 'tailwind.config.js' -- npm run css:build",
+        
+    "php:listen": "npm-run-all --parallel php:index:listen php:grid:listen",
+    "php:terser": "npm-run-all --parallel php:index:terser php:grid:terser",
+    "php:index:listen": "onchange 'source/index.php' -- npm run php:index:terser",
+    "php:index:terser": "html-minifier-terser --collapse-whitespace --remove-comments --remove-empty-attributes  --remove-redundant-attributes --remove-script-type-attributes --remove-style-link-type-attributes source/index.php -o htdocs/index.php",
+    "php:grid:listen": "onchange 'source/grid.php' -- npm run php:grid:terser",
+    "php:grid:terser": "html-minifier-terser --collapse-whitespace --remove-comments --remove-empty-attributes  --remove-redundant-attributes --remove-script-type-attributes --remove-style-link-type-attributes source/grid.php -o htdocs/grid.php",
+    
+    "js:build": "run-s copy:all js:app:terser:build js:lib:terser:build",
+    "js:listen": "npm-run-all --parallel js:app:listen js:lib:listen",
+    "js:app:listen": "onchange ./source/app/*.js -- npm run js:app:terser:dev",
+    "js:app:terser:build": "terser source/app/*.js -m -c -o htdocs/app.js",
+    "js:app:terser:dev": "terser source/app/*.js --output htdocs/app.js",
+    "js:lib:listen": "onchange ./source/lib/*.js -- npm run js:lib:terser:dev",
+    "js:lib:terser:build": "terser source/lib/*.js -o htdocs/lib.js",
+    "js:lib:terser:dev": "terser source/lib/*.js --output htdocs/lib.js",
+  
+    "update": "npm-run-all update:npm update:ncu",
+    "update:npm": "npm -g update",
+    "update:ncu": "ncu -u"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^13.1.3",
+    "cssnano": "^5.1.7",
+    "html-minifier-terser": "^6.1.0",
+    "lil-gui": "^0.16.1",
+    "lite-server": "^2.6.1",
+    "npm-run-all": "^4.1.5",
+    "onchange": "^7.1.0",
+    "open-cli": "^7.0.1",
+    "p5": "^1.4.1",
+    "postcss": "^8.4.12",
+    "postcss-cli": "^9.1.0",
+    "postcss-import": "^14.1.0",
+    "rollup": "^2.70.1",
+    "stats.js": "^0.17.0",
+    "tailwindcss": "^3.0.23",
+    "terser": "^5.12.1"
+  }
+}

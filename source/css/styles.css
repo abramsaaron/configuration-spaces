@@ -1,0 +1,79 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@layer components {
+  /* https://lil-gui.georgealways.com/examples/kitchen-sink/ */
+  .lil-gui {
+    --background-color: #f6f6f6;
+    --text-color: #3d3d3d;
+    --title-background-color: #efefef;
+    --title-text-color: #3d3d3d;
+    --widget-color: #eaeaea;
+    --hover-color: #f0f0f0;
+    --focus-color: #fafafa;
+    --number-color: #07aacf;
+    --string-color: #8da300;
+    --font-size: 16px;
+    --input-font-size: 15px;
+    --padding: 10px;
+    --spacing: 10px;
+    --widget-height: 24px;
+  }
+
+  #lilgui > * {
+    @apply mt-4;
+  }
+
+  .xlil-gui {
+    --font-size: 16px;
+    --input-font-size: 14px;
+    --padding: 6px;
+    --spacing: 8px;
+    --widget-height: 24px;
+  }
+  .xlil-gui select {
+    @apply p-2 m-2 bg-gray-800;
+  }
+
+  /* since nested groupes are not supported we have to use 
+     regular css for the nested dropdowns 
+  */
+  .menu li > ul {
+    transform: translatex(100%) scale(0);
+  }
+
+  .menu li:hover > ul {
+    transform: translatex(101%) scale(1);
+  }
+
+  .menu li > button svg {
+    transform: rotate(-90deg);
+  }
+
+  .menu li:hover > button svg {
+    transform: rotate(-270deg);
+  }
+
+  /* Below styles fake what can be achieved with the tailwind config
+you need to add the group-hover variant to scale and define your custom
+min width style.
+See https://codesandbox.io/s/tailwindcss-multilevel-dropdown-y91j7?file=/index.html
+for implementation with config file
+*/
+  .menu .group:hover .group-hover\:scale-100 {
+    transform: scale(1);
+  }
+
+  .menu .group:hover .group-hover\:-rotate-180 {
+    transform: rotate(180deg);
+  }
+
+  .menu .scale-0 {
+    transform: scale(0);
+  }
+
+  .menu .min-w-32 {
+    min-width: 8rem;
+  }
+}
