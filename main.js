@@ -194,7 +194,8 @@ function initParameters() {
   parameters.sphereView = true;
   parameters.lights = true;
   parameters.moveDotsRandomly = true;
-  parameters.robotSpeed = 0.0005;
+  parameters.robotASpeed = 0.0005;
+  parameters.robotBSpeed = 0.0005;
 }
 
 // GUI setup
@@ -250,7 +251,8 @@ function initGUI() {
     init();
   });
   visualGUI.add(parameters, "moveDotsRandomly");
-  visualGUI.add(parameters, "robotSpeed", 0, 0.1);
+  visualGUI.add(parameters, "robotASpeed", 0, 0.1);
+  visualGUI.add(parameters, "robotBSpeed", 0, 0.1);
   visualGUI.open();
 
   // Graph
@@ -350,10 +352,10 @@ class Graph {
 
   moveRobots() {
     if (robotAmoving) {
-      this.robotA.move(parameters.robotSpeed);
+      this.robotA.move(parameters.robotASpeed);
     }
     if (robotBmoving) {
-      this.robotB.move(parameters.robotSpeed);
+      this.robotB.move(parameters.robotBSpeed);
     }
   }
 
