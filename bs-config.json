@@ -1,0 +1,7 @@
+{
+  "files": ["./htdocs/**/*.{html,htm,css,js}"],
+  "server": {
+    "baseDir": "./htdocs"
+  },
+  "browser": "Firefox"
+}

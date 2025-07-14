@@ -1,7 +1,0 @@
-We are creating an interactive web app for exploring configuration spaces.  Configuration spaces model the combined movements of several particles, so they arise naturally in the study of any system with moving parts (molecules in a solution, data packets on the internet, cars on the road, planets in the solar system, and on and on).
-
-Configuration spaces also offer a pleasing entry point into the field of topology, and specifically the idea of dimension.  One can get a feel for a complex system by physically manipulating the various moving parts, and one starts to develop intuition for what it means to move around in a high-dimensional space.  This gives insight into why high-dimensional spaces are interesting and relevant things to study.
-
-The goal of this project is to create a tool for people to manipulate a particle system on a graph (left) and the corresponding configuration space (right).  (A future project idea is to make analogous software for other types of systems, such as mechanical linkages.)  Interactive software allows the user the flexibility to change the many parameters defining the system in addition to manipulating the particles within the system itself.
-
-This project brought together two people with very different expertise, and we each learned a great deal from the other.  Our different perspectives—from mathematics and computer science—taught us each to think about these objects from the point of view of the other, deepening our own understanding in the process.
