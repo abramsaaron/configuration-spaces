@@ -78,9 +78,9 @@ function init() {
 
 function toggleView() {
   if (viewingStyle === "dual") {
-    initView("single");
+    viewingStyle = "single";
   } else if (viewingStyle === "single") {
-    initView("dual");
+    viewingStyle = "dual";
   }
   init();
 }
@@ -117,7 +117,9 @@ function draw() {
   }
 
   if (parameters.moveDotsRandomly) {
-    graph.moveRobots();
+    for (let i = 0; i < parameters.speedUp; i++) {
+      graph.moveRobots();
+    }
   }
 
   graph.show();
@@ -194,8 +196,15 @@ function initParameters() {
   parameters.sphereView = true;
   parameters.lights = true;
   parameters.moveDotsRandomly = true;
-  parameters.robotASpeed = 0.0005;
-  parameters.robotBSpeed = 0.0005;
+  parameters.robotASpeed = 0.1;
+  parameters.robotBSpeed = 0.1;
+  parameters.amountMultiplier = 0.05;
+  parameters.recordHistory = true;
+  parameters.showHistory = true;
+  parameters.resetHistory = function () {
+    configuration_space.graphLayout.configuration.resetHistory();
+  };
+  parameters.speedUp = 1;
 }
 
 // GUI setup
@@ -231,8 +240,9 @@ function initGUI() {
   ]);
   globalUI.open();
   graphPicker.onFinishChange(function (value) {
-    initView(viewingStyle);
-    initGraph(value);
+    init();
+    // initView(viewingStyle);
+    // initGraph(value);
   });
 
   // Visual
@@ -251,8 +261,13 @@ function initGUI() {
     init();
   });
   visualGUI.add(parameters, "moveDotsRandomly");
-  visualGUI.add(parameters, "robotASpeed", 0, 0.1);
-  visualGUI.add(parameters, "robotBSpeed", 0, 0.1);
+  visualGUI.add(parameters, "amountMultiplier", 0, 1).step(0.001);
+  visualGUI.add(parameters, "robotASpeed", 0, 1).step(0.001);
+  visualGUI.add(parameters, "robotBSpeed", 0, 1).step(0.001);
+  visualGUI.add(parameters, "speedUp", 0, 1000);
+  visualGUI.add(parameters, "recordHistory");
+  visualGUI.add(parameters, "showHistory");
+  visualGUI.add(parameters, "resetHistory");
   visualGUI.open();
 
   // Graph
@@ -317,7 +332,6 @@ function initGraph(graphType) {
     }
   }
 
-
   graph.createGraphLayout(graphicsGraph, true);
   configuration_space = new Configuration_space(graph, 2);
   configuration_space.createGraphLayout(graphicsConfigSpace, true);
@@ -351,11 +365,53 @@ class Graph {
   }
 
   moveRobots() {
+    let addtoA = parameters.amountMultiplier * parameters.robotASpeed;
+    let addtoB = parameters.amountMultiplier * parameters.robotBSpeed;
+    let nextA = this.robotA.amount + addtoA;
+    let nextB = this.robotB.amount + addtoB;
+
+    if (nextA >= 1 && nextB < 1) {
+      nextA = 1;
+      nextB = this.robotB.amount + (addtoB * (1 - this.robotA.amount)) / addtoA;
+    } else if (nextA < 1 && nextB >= 1) {
+      nextB = 1;
+      nextA = this.robotA.amount + (addtoA * (1 - this.robotB.amount)) / addtoB;
+    } else if (nextA >= 1 && nextB >= 1) {
+      // --------- amountA ---------- 1.0 --- nextA
+      // hits 1.0 at time ca. 2/3 = timeA
+      // ---- amountB --------------- 1.0 ------------------------------------------ nextB
+      // hits 1.0 at time ca. 1/4 = timeB
+      // => B hits 1.0 first, so we need to:
+      //    set B to 1.0
+      //    set A accordingly
+      let timeA = (1 - this.robotA.amount) / (nextA - this.robotA.amount);
+      let timeB = (1 - this.robotB.amount) / (nextB - this.robotB.amount);
+
+      if (timeA > timeB) {
+        nextB = 1;
+        nextA = this.robotA.amount + addtoA * timeB;
+      } else {
+        nextA = 1;
+        nextB = this.robotB.amount + addtoB * timeA;
+      }
+    }
+
     if (robotAmoving) {
-      this.robotA.move(parameters.robotASpeed);
+      this.robotA.setAmount(nextA);
     }
     if (robotBmoving) {
-      this.robotB.move(parameters.robotBSpeed);
+      this.robotB.setAmount(nextB);
+    }
+
+    if (parameters.recordHistory) {
+      configuration_space.graphLayout.configuration.record(
+        this.robotA.nodeFrom,
+        this.robotA.nodeTo,
+        this.robotA.amount,
+        this.robotB.nodeFrom,
+        this.robotB.nodeTo,
+        this.robotB.amount
+      );
     }
   }
 
@@ -462,7 +518,11 @@ class Configuration_space {
     }
 
     // This requires graph.createGraphLayout to have been called.
-    this.graphLayout.configuration = new Configuration(this.graphLayout, graph.robotA, graph.robotB);
+    this.graphLayout.configuration = new Configuration(
+      this.graphLayout,
+      graph.robotA,
+      graph.robotB
+    );
 
     this.graphLayout.initlayout();
   }
@@ -578,12 +638,7 @@ class GraphLayout {
 
     if (this.showRobots) {
       for (let robot of this.source.getRobots()) {
-        let position = p5.Vector.lerp(
-          robot.nodeFrom.position,
-          robot.nodeTo.position,
-          robot.amount
-        );
-        robot.show(position);
+        robot.show();
       }
     }
 
@@ -721,7 +776,6 @@ class Node {
     this.neighbors = [];
     this.squareneighbors = [];
     this.nodesInRange = [];
-    // this.history = new Array(historyLength).fill(this.position);
   }
 
   connectTo(node) {
@@ -917,7 +971,10 @@ class Edge {
     this.nodeFrom = nodeFrom;
     this.nodeTo = nodeTo;
     this.subPoints = [];
-    if (Array.isArray(this.nodeFrom.label) && Array.isArray(this.nodeTo.label)) {
+    if (
+      Array.isArray(this.nodeFrom.label) &&
+      Array.isArray(this.nodeTo.label)
+    ) {
       if (this.nodeFrom.label[0] === this.nodeTo.label[0]) {
         this.coordinate = 0;
       } else if (this.nodeFrom.label[1] === this.nodeTo.label[1]) {
@@ -1084,7 +1141,9 @@ class Robot {
   }
 
   getRandomNeighbor() {
-    let candidates = this.nodeFrom.neighbors.filter(x => !this.graph.otherRobot(this).occupyingNodes().includes(x));
+    let candidates = this.nodeFrom.neighbors.filter(
+      (x) => !this.graph.otherRobot(this).occupyingNodes().includes(x)
+    );
     if (candidates.length > 0) {
       return candidates[floor(random(candidates.length))];
     } else {
@@ -1092,23 +1151,33 @@ class Robot {
     }
   }
 
-  move(amount) {
+  setAmount(nextAmount) {
     if (this.amount === 0) {
+      // If we are at 0, pick a random neighbor.
       let nextNode = this.getRandomNeighbor();
       if (nextNode) {
         this.nodeTo = nextNode;
       } else {
+        // It there is no available neighbor, stop.
         return false;
       }
     }
-    this.amount += amount;
-    if (this.amount >= 1) {
+    // Increment amount
+    this.amount = nextAmount;
+
+    // Check if we
+    if (this.amount >= 1.0) {
       this.amount = 0;
       this.nodeFrom = this.nodeTo;
     }
   }
 
-  show(position) {
+  show() {
+    let position = p5.Vector.lerp(
+      this.nodeFrom.position,
+      this.nodeTo.position,
+      this.amount
+    );
     if (this.nodeBorder) {
       this.graph.graphLayout.graphics.stroke(150);
       this.graph.graphLayout.graphics.strokeWeight(
@@ -1124,7 +1193,11 @@ class Robot {
     // Draw node
     if (this.graph.graphLayout.layout3D) {
       this.graph.graphLayout.graphics.push();
-      this.graph.graphLayout.graphics.translate(position.x, position.y, position.z);
+      this.graph.graphLayout.graphics.translate(
+        position.x,
+        position.y,
+        position.z
+      );
       if (parameters.sphereView) {
         this.graph.graphLayout.graphics.sphere(0.55 * thisSize, 10, 10);
       } else {
@@ -1152,32 +1225,31 @@ class Configuration {
     this.graphLayout = graphLayout;
     this.robotA = robotA;
     this.robotB = robotB;
+    this.history = [];
   }
 
-  show() {
-    let thisSize = this.graphLayout.nodeSize;
+  getPosition(robotAfrom, robotAto, amountA, robotBfrom, robotBto, amountB) {
     let position;
 
-    if (this.robotA.amount === 0 && this.robotB.amount === 0) {
-      let stateLabel = [this.robotA.nodeFrom.label, this.robotB.nodeFrom.label];
+    if (amountA === 0 && amountB === 0) {
+      let stateLabel = [robotAfrom.label, robotBfrom.label];
       let state = this.graphLayout.getNode(stateLabel);
       position = state.position;
-    } else if (this.robotA.amount > 0 && this.robotB.amount === 0) {
-      let stateFromLabel = [this.robotA.nodeFrom.label, this.robotB.nodeFrom.label];
-      let stateToLabel = [this.robotA.nodeTo.label, this.robotB.nodeFrom.label];
+    } else if (amountA > 0 && amountB === 0) {
+      let stateFromLabel = [robotAfrom.label, robotBfrom.label];
+      let stateToLabel = [robotAto.label, robotBfrom.label];
       let stateFrom = this.graphLayout.getNode(stateFromLabel);
       let stateTo = this.graphLayout.getNode(stateToLabel);
-      position = p5.Vector.lerp(stateFrom.position, stateTo.position, this.robotA.amount);
-
-    } else if (this.robotA.amount === 0 && this.robotB.amount > 0) {
-      let stateFromLabel = [this.robotA.nodeFrom.label, this.robotB.nodeFrom.label];
-      let stateToLabel = [this.robotA.nodeFrom.label, this.robotB.nodeTo.label];
+      position = p5.Vector.lerp(stateFrom.position, stateTo.position, amountA);
+    } else if (amountA === 0 && amountB > 0) {
+      let stateFromLabel = [robotAfrom.label, robotBfrom.label];
+      let stateToLabel = [robotAfrom.label, robotBto.label];
       let stateFrom = this.graphLayout.getNode(stateFromLabel);
       let stateTo = this.graphLayout.getNode(stateToLabel);
-      position = p5.Vector.lerp(stateFrom.position, stateTo.position, this.robotB.amount);
+      position = p5.Vector.lerp(stateFrom.position, stateTo.position, amountB);
     } else {
       // (robotA.nodeFrom, robotB.nodeFrom)      edgeAfrom          (robotA.nodeTo, robotB.nodeFrom)
-      //                                  
+      //
       //                             *-->---X------------>---*
       //                             |      |                |
       //                             |      |                |
@@ -1187,19 +1259,84 @@ class Configuration {
       //                             |      Y                |
       //                             |      |                |
       //                             *--->--X------------->--*
-      //                                  
+      //
       // (robotA.nodeFrom, robotB.nodeTo)         edgeAto         (robotA.nodeTo, robotB.nodeTo)
 
-      let amountA = this.robotA.amount;
-      let amountB = this.robotB.amount;
-      let topLeft = this.graphLayout.getNode([this.robotA.nodeFrom.label, this.robotB.nodeFrom.label]).position;
-      let topRight = this.graphLayout.getNode([this.robotA.nodeTo.label, this.robotB.nodeFrom.label]).position;
-      let botLeft = this.graphLayout.getNode([this.robotA.nodeFrom.label, this.robotB.nodeTo.label]).position;
-      let botRight = this.graphLayout.getNode([this.robotA.nodeTo.label, this.robotB.nodeTo.label]).position;
+      let topLeft = this.graphLayout.getNode([
+        robotAfrom.label,
+        robotBfrom.label,
+      ]).position;
+      let topRight = this.graphLayout.getNode([
+        robotAto.label,
+        robotBfrom.label,
+      ]).position;
+      let botLeft = this.graphLayout.getNode([robotAfrom.label, robotBto.label])
+        .position;
+      let botRight = this.graphLayout.getNode([robotAto.label, robotBto.label])
+        .position;
       let topX = p5.Vector.lerp(topLeft, topRight, amountA);
       let botX = p5.Vector.lerp(botLeft, botRight, amountA);
       position = p5.Vector.lerp(topX, botX, amountB);
     }
+    return position;
+  }
+
+  record(robotAfrom, robotAto, amountA, robotBfrom, robotBto, amountB) {
+    this.history.push([
+      robotAfrom,
+      robotAto,
+      amountA,
+      robotBfrom,
+      robotBto,
+      amountB,
+    ]);
+  }
+
+  resetHistory() {
+    this.history = [];
+  }
+
+  show() {
+    if (parameters.showHistory) {
+      for (let i = 0; i < this.history.length - 1; i++) {
+        let A = this.history[i];
+        let B = this.history[i + 1];
+        let from = this.getPosition(A[0], A[1], A[2], A[3], A[4], A[5]);
+        let to = this.getPosition(B[0], B[1], B[2], B[3], B[4], B[5]);
+
+        this.graphLayout.graphics.stroke(0);
+        this.graphLayout.graphics.strokeWeight(1.0);
+        this.graphLayout.graphics.line(
+          from.x,
+          from.y,
+          from.z,
+          to.x,
+          to.y,
+          to.z
+        );
+      }
+    }
+
+    this.showAt(
+      this.robotA.nodeFrom,
+      this.robotA.nodeTo,
+      this.robotA.amount,
+      this.robotB.nodeFrom,
+      this.robotB.nodeTo,
+      this.robotB.amount
+    );
+  }
+
+  showAt(robotAfrom, robotAto, amountA, robotBfrom, robotBto, amountB) {
+    let thisSize = this.graphLayout.nodeSize;
+    let position = this.getPosition(
+      robotAfrom,
+      robotAto,
+      amountA,
+      robotBfrom,
+      robotBto,
+      amountB
+    );
 
     this.graphLayout.graphics.push();
     this.graphLayout.graphics.translate(position.x, position.y, position.z);
@@ -1445,9 +1582,7 @@ function cartesianProductOf() {
       });
       return ret;
     },
-    [
-      []
-    ]
+    [[]]
   );
 }
 
@@ -1485,9 +1620,7 @@ const flatten = (arr) => [].concat.apply([], arr);
 const product = (...sets) =>
   sets.reduce(
     (acc, set) => flatten(acc.map((x) => set.map((y) => [...x, y]))),
-    [
-      []
-    ]
+    [[]]
   );
 
 function arraysEqual(a1, a2) {
