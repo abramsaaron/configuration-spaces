@@ -1,2 +1,0 @@
-Graph parameters = {"edgelength":100,"cohesionthreshold":2,"repulsion":50000,"separationFactor":1,"planarForce":0,"centerForce":0,"extraCenterForce":0,"moveToCenter":false}
-Configuration space parameters = {"firstCoordinateEdgeLength":100,"firstCoordinateForce":0.05,"secondCoordinateEdgeLength":100,"secondCoordinateForce":0.01,"firstCoordinateMirrorForce":0,"secondCoordinateMirrorForce":0,"coordinatePreference":0.01,"extraCenterPreference":0,"cohesionthreshold":2,"repulsion":50000,"separationFactor":1,"centerForce":0,"extraCenterForce":0,"moveToCenter":false}
