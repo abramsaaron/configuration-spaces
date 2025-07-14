@@ -97,13 +97,15 @@ function initView(style) {
   }
 
   if (parameters.lights) {
+    let ambientBrightness = 180;
+    let directionalBrightness = 180;
     // Lights for graph
-    graphicsGraph.ambientLight(0, 0, 255);
-    graphicsGraph.directionalLight(0, 0, 255, -1, 0, 0);
+    graphicsGraph.ambientLight(0, 0, ambientBrightness);
+    graphicsGraph.directionalLight(0, 0, directionalBrightness, -1, 0, 0);
 
     // Lights for config space
-    graphicsConfigSpace.ambientLight(0, 0, 220);
-    graphicsConfigSpace.directionalLight(0, 0, 255, -1, 0, 0);
+    graphicsConfigSpace.ambientLight(0, 0, ambientBrightness);
+    graphicsConfigSpace.directionalLight(0, 0, directionalBrightness, -1, 0, 0);
   }
 }
 
@@ -133,7 +135,7 @@ function draw() {
       ("0" + str(day())).slice(-2) +
       "_" +
       ("0" + str(hour())).slice(-2) +
-      ("0" + str(hour())).slice(-2) +
+      ("0" + str(minute())).slice(-2) +
       ("0" + str(second())).slice(-2);
     let type = parameters.graphType.slice();
     saveCanvas(graph.graphLayout.graphics, time + "-" + type + "-graph.png");
@@ -146,7 +148,7 @@ function draw() {
       ("0" + str(day())).slice(-2) +
       "_" +
       ("0" + str(hour())).slice(-2) +
-      ("0" + str(hour())).slice(-2) +
+      ("0" + str(minute())).slice(-2) +
       ("0" + str(second())).slice(-2);
     let type = parameters.graphType.slice();
     saveCanvas(
@@ -199,12 +201,15 @@ function initParameters() {
   parameters.robotASpeed = 0.1;
   parameters.robotBSpeed = 0.1;
   parameters.amountMultiplier = 0.05;
-  parameters.recordHistory = true;
-  parameters.showHistory = true;
+  parameters.recordHistory = !true;
+  parameters.showHistory = !true;
   parameters.resetHistory = function () {
     configuration_space.graphLayout.configuration.resetHistory();
   };
   parameters.speedUp = 1;
+  parameters.labelX = 0;
+  parameters.labelY = 0;
+  parameters.labelZ = 0;
 }
 
 // GUI setup
@@ -268,6 +273,9 @@ function initGUI() {
   visualGUI.add(parameters, "recordHistory");
   visualGUI.add(parameters, "showHistory");
   visualGUI.add(parameters, "resetHistory");
+  visualGUI.add(parameters, "labelX", -100, 100).step(1);
+  visualGUI.add(parameters, "labelY", -100, 100).step(1);
+  visualGUI.add(parameters, "labelZ", -100, 100).step(1);
   visualGUI.open();
 
   // Graph
@@ -909,7 +917,7 @@ class Node {
         this.graphics.rotateY(-rotXYZ[1]);
         this.graphics.rotateZ(-rotXYZ[2]);
         // Draw the ellipse a little in front
-        this.graphics.translate(0, 0, 0.5 * thisSize);
+        this.graphics.translate(0, -30, 10 + 0 * thisSize);
         this.graphics.stroke(0);
         this.graphics.strokeWeight(1.0);
         this.graphics.ellipse(0, 0, thisSize, thisSize);
@@ -941,7 +949,7 @@ class Node {
         this.graphics.rotateX(-rotXYZ[0]);
         this.graphics.rotateY(-rotXYZ[1]);
         this.graphics.rotateZ(-rotXYZ[2]);
-        this.graphics.translate(0, 0, 0.75 * thisSize);
+        this.graphics.translate(parameters.labelX, parameters.labelY, parameters.labelZ);
         this.graphics.text(this.labelText, 0, 0);
         this.graphics.pop();
       } else {
@@ -1582,7 +1590,9 @@ function cartesianProductOf() {
       });
       return ret;
     },
-    [[]]
+    [
+      []
+    ]
   );
 }
 
@@ -1592,7 +1602,7 @@ function labelToString(L) {
   result = "";
   if (Array.isArray(L)) {
     for (let l of L) {
-      result += l + ",";
+      result += l + " ";
     }
     result = result.slice(0, -1);
     return result;
@@ -1620,7 +1630,9 @@ const flatten = (arr) => [].concat.apply([], arr);
 const product = (...sets) =>
   sets.reduce(
     (acc, set) => flatten(acc.map((x) => set.map((y) => [...x, y]))),
-    [[]]
+    [
+      []
+    ]
   );
 
 function arraysEqual(a1, a2) {
