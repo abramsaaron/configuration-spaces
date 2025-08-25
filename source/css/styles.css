@@ -2,39 +2,56 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
-@layer components {
+@layer base {
   /* https://lil-gui.georgealways.com/examples/kitchen-sink/ */
   .lil-gui {
-    --background-color: #f6f6f6;
-    --text-color: #3d3d3d;
-    --title-background-color: #efefef;
-    --title-text-color: #3d3d3d;
-    --widget-color: #eaeaea;
-    --hover-color: #f0f0f0;
-    --focus-color: #fafafa;
-    --number-color: #07aacf;
-    --string-color: #8da300;
-    --font-size: 16px;
-    --input-font-size: 15px;
-    --padding: 10px;
-    --spacing: 10px;
-    --widget-height: 24px;
-  }
-
-  #lilgui > * {
-    @apply mt-4;
-  }
-
-  .xlil-gui {
+    opacity: 80%;
+    --width: 100%;
+    --font-family: "Alpino-Medium";
     --font-size: 16px;
     --input-font-size: 14px;
+    --widget-height: 24px;
+    --name-width: 65%;
     --padding: 6px;
     --spacing: 8px;
-    --widget-height: 24px;
   }
-  .xlil-gui select {
+
+  #gui-left > *,
+  #gui-right > * {
+    @apply mt-2;
+  }
+
+  a.external:after {
+    margin: 0 3px 0 5px;
+    content: "";
+    -webkit-mask: url(external.svg);
+    mask: url(external.svg);
+    display: inline-block;
+    background-color: #333;
+    width: 0.8rem;
+    height: 0.8rem;
+  }
+
+  /* .lil-gui { */
+  /* --background-color: #f6f6f6; */
+  /* --text-color: #3d3d3d; */
+  /* --title-background-color: #efefef; */
+  /* --title-text-color: #3d3d3d; */
+  /* --widget-color: #eaeaea; */
+  /* --hover-color: #f0f0f0; */
+  /* --focus-color: #fafafa; */
+  /* --number-color: #07aacf; */
+  /* --string-color: #8da300; */
+  /* --font-size: 16px; */
+  /* --input-font-size: 15px; */
+  /* --padding: 10px; */
+  /* --spacing: 10px; */
+  /* --widget-height: 24px; */
+  /* } */
+
+  /* .lil-gui select {
     @apply p-2 m-2 bg-gray-800;
-  }
+  } */
 
   /* since nested groupes are not supported we have to use 
      regular css for the nested dropdowns 
@@ -76,4 +93,20 @@ for implementation with config file
   .menu .min-w-32 {
     min-width: 8rem;
   }
+}
+
+@font-face {
+  font-family: "Stardom-Regular";
+  src: url("fonts/Stardom-Regular.woff2") format("woff2"), url("fonts/Stardom-Regular.woff") format("woff"), url("fonts/Stardom-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Alpino-Medium";
+  src: url("fonts/Alpino-Medium.woff2") format("woff2"), url("fonts/Alpino-Medium.woff") format("woff"), url("fonts/Alpino-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+  font-style: normal;
 }

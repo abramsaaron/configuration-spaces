@@ -1,4 +1,4 @@
-// STRINGS AND URL
+// URL HANDLING
 
 function updateURL() {
   if (verbose) console.log("updateURL");
@@ -31,15 +31,6 @@ function updateURL() {
     );
     if (verbose) console.log(newurl);
   }
-}
-
-function edgesToString(edges) {
-  let result = "";
-  for (let edge of edges) {
-    result += "[" + edge + "],";
-  }
-  result = result.substr(0, result.length - 1);
-  return result;
 }
 
 function setParametersFromURL() {
@@ -132,6 +123,268 @@ function setParametersFromURL() {
       parameters.graphType = "custom";
     }
   }
+}
+
+// FILE HANDLING
+
+function handleFile(file) {
+  let str = file.data;
+  let strings = str.split("\n");
+  readFromString(strings);
+}
+
+function writeToFiles() {
+  writeParametersToFile();
+  // writeLayoutToFile();
+  // writeChainComplexToFile();
+  // writeObjToFile();
+}
+
+function writeParametersToFile() {
+  let filename = makeFileName("");
+  updateInfoString();
+  saveStrings(infoStrings, filename, "txt");
+  saveCanvas(configuration_space.graphLayout.graphics, filename + ".png");
+}
+
+function writeLayoutToFile() {
+  updateLayoutStrings();
+  saveStrings(layoutStrings, makeFileName("-layout"), "txt");
+}
+
+function writeChainComplexToFile() {
+  let str = getChompString();
+  saveStrings([str], makeFileName(""), "chn");
+}
+
+function writeObjToFile() {
+  let str = getObjString();
+  saveStrings([str], makeFileName(""), "obj");
+}
+
+function readHomology() {
+  const filename = "catalog/" + parameters.graphType + ".gen";
+  loadStrings(filename, saveLoopsInConfigurationSpace);
+}
+
+function readFromFile(fileName) {
+  loadStrings(fileName, readFromString);
+}
+
+function readLayoutFromFile(fileName) {
+  loadStrings(fileName, readLayoutFromStrings);
+}
+
+// PARSE STRINGS
+
+function readFromString(strings) {
+  if (verbose) console.log("readFromString");
+  let parametersFromFile = {};
+  for (let s of strings) {
+    if (s === "") continue;
+    let parts = split(s, " = ");
+    if (parts.length !== 2) continue;
+    parametersFromFile[parts[0]] = parts[1];
+  }
+
+  parameters.graphType = parametersFromFile["Graph"];
+
+  if (parameters.graphType === "custom") {
+    customGraph = {};
+    customGraph.nodes = JSON.parse(parametersFromFile["Nodes"]);
+    customGraph.edges = JSON.parse(parametersFromFile["Edges"]);
+  }
+
+  let globalParametersString = parametersFromFile["Parameters"];
+  let globalParameters = JSON.parse(globalParametersString);
+  parameters.mode = globalParameters["mode"];
+  parameters.showGraph = globalParameters["showGraph"];
+  parameters.showConfigurationspace = globalParameters["showConfigurationspace"];
+  parameters.showRobots = globalParameters["showRobots"];
+  parameters.syncView = globalParameters["syncView"];
+  parameters.distinguishDots = globalParameters["distinguishDots"];
+  parameters.gridOn = globalParameters["gridOn"];
+  parameters.squareOn = globalParameters["squareOn"];
+  parameters.showHyperplanes = globalParameters["showHyperplanes"];
+  parameters.granularityFirstCoordinate = globalParameters["granularityFirstCoordinate"];
+  parameters.granularitySecondCoordinate = globalParameters["granularitySecondCoordinate"];
+  parameters.showText = globalParameters["showText"];
+  parameters.sphereView = globalParameters["sphereView"];
+  parameters.lights = globalParameters["lights"];
+  parameters.moveDotsRandomly = globalParameters["moveDotsRandomly"];
+  parameters.robotASpeed = globalParameters["robotASpeed"];
+  parameters.robotBSpeed = globalParameters["robotBSpeed"];
+  parameters.amountMultiplier = globalParameters["amountMultiplier"];
+  parameters.recordHistory = globalParameters["recordHistory"];
+  parameters.showHistory = globalParameters["showHistory"];
+  parameters.sphereDetail = globalParameters["sphereDetail"];
+  parameters.speedUp = globalParameters["speedUp"];
+  parameters.labelX = globalParameters["labelX"];
+  parameters.labelY = globalParameters["labelY"];
+  parameters.labelZ = globalParameters["labelZ"];
+  parameters.colorRobotA = globalParameters["colorRobotA"];
+  parameters.colorRobotB = globalParameters["colorRobotB"];
+  parameters.colorConfig = globalParameters["colorConfig"];
+  parameters.colorNode = globalParameters["colorNode"];
+  parameters.colorGraphEdge = globalParameters["colorGraphEdge"];
+  parameters.squareColor = globalParameters["squareColor"];
+  parameters.squareOpacity = globalParameters["squareOpacity"];
+  parameters.activeDotColor = globalParameters["activeDotColor"];
+  parameters.deleteNodeColor = globalParameters["deleteNodeColor"];
+  parameters.selectedNodeForEdgeColor = globalParameters["selectedNodeForEdgeColor"];
+  parameters.nodeSize = globalParameters["nodeSize"];
+  parameters.robotsNodeSize = globalParameters["robotsNodeSize"];
+  parameters.configNodeSize = globalParameters["configNodeSize"];
+  parameters.edgeWidthGraph = globalParameters["edgeWidthGraph"];
+  parameters.edgeWidthConfigSpace = globalParameters["edgeWidthConfigSpace"];
+  parameters.edgeWidthGrid = globalParameters["edgeWidthGrid"];
+  parameters.maxspeed = globalParameters["maxspeed"];
+
+  if (verbose) console.log("readFromString: call initView and initGraph");
+
+  initView();
+  initGraph(parameters.graphType);
+
+  let graphNodesWithExtraCenterForce = JSON.parse(parametersFromFile["Graph nodes with extra center force"]);
+  for (let node of graphNodesWithExtraCenterForce) {
+    graph.graphLayout.getNode(node).applyExtraCenterForce = true;
+  }
+
+  let graphParametersString = parametersFromFile["Graph parameters"];
+  let graphParameters = JSON.parse(graphParametersString);
+  graph.graphLayout.edgelength = graphParameters["edgelength"];
+  graph.graphLayout.cohesionthreshold = graphParameters["cohesionthreshold"];
+  graph.graphLayout.repulsion = graphParameters["repulsion"];
+  graph.graphLayout.separationFactor = graphParameters["separationFactor"];
+  graph.graphLayout.planarForce = graphParameters["planarForce"];
+  graph.graphLayout.centerForce = graphParameters["centerForce"];
+  graph.graphLayout.extraCenterForce = graphParameters["extraCenterForce"];
+  graph.graphLayout.moveToCenter = graphParameters["moveToCenter"];
+  // infoStrings.push("Graph parameters = " + JSON.stringify(graphParameters));
+
+  let configSpaceParametersString = parametersFromFile["Configuration space parameters"];
+  let configSpaceParameters = JSON.parse(configSpaceParametersString);
+  configuration_space.graphLayout.firstCoordinateEdgeLength = configSpaceParameters["firstCoordinateEdgeLength"];
+  configuration_space.graphLayout.firstCoordinateForce = configSpaceParameters["firstCoordinateForce"];
+  configuration_space.graphLayout.secondCoordinateEdgeLength = configSpaceParameters["secondCoordinateEdgeLength"];
+  configuration_space.graphLayout.secondCoordinateForce = configSpaceParameters["secondCoordinateForce"];
+  configuration_space.graphLayout.firstCoordinateMirrorForce = configSpaceParameters["firstCoordinateMirrorForce"];
+  configuration_space.graphLayout.secondCoordinateMirrorForce = configSpaceParameters["secondCoordinateMirrorForce"];
+  configuration_space.graphLayout.coordinatePreference = configSpaceParameters["coordinatePreference"];
+  configuration_space.graphLayout.extraCenterPreference = configSpaceParameters["extraCenterPreference"];
+  configuration_space.graphLayout.cohesionthreshold = configSpaceParameters["cohesionthreshold"];
+  configuration_space.graphLayout.repulsion = configSpaceParameters["repulsion"];
+  configuration_space.graphLayout.separationFactor = configSpaceParameters["separationFactor"];
+  configuration_space.graphLayout.centerForce = configSpaceParameters["centerForce"];
+  configuration_space.graphLayout.extraCenterForce = configSpaceParameters["extraCenterForce"];
+  configuration_space.graphLayout.moveToCenter = configSpaceParameters["moveToCenter"];
+  // infoStrings.push("Configuration space parameters = " + JSON.stringify(configSpaceParameters));
+
+  if (verbose) console.log("readFromString: call initGUI");
+  // initGUI();
+
+  for (let n of graph.nodes) {
+    let node = graph.graphLayout.getNode(n);
+    let coordinates = parametersFromFile["Node position (" + n + ")"];
+
+    if (coordinates !== undefined && coordinates.charAt(0) == "[" && coordinates.charAt(coordinates.length - 1) == "]") {
+      coordinates = coordinates.slice(1, -1);
+      coordinates = coordinates.split(",").map(Number);
+    }
+
+    // if (verbose) console.log("node coordinates = " + coordinates);
+    node.position = createVector(coordinates[0], coordinates[1], coordinates[2]);
+  }
+
+  for (let node of configuration_space.graphLayout.nodes) {
+    let coordinates = parametersFromFile["Configuration position (" + node.label[0] + "," + node.label[1] + ")"];
+
+    if (coordinates !== undefined && coordinates.charAt(0) == "[" && coordinates.charAt(coordinates.length - 1) == "]") {
+      coordinates = coordinates.slice(1, -1);
+      coordinates = coordinates.split(",").map(Number);
+    }
+    if (verbose) console.log("configuration coordinates = " + coordinates);
+    node.position = createVector(coordinates[0], coordinates[1], coordinates[2]);
+  }
+
+  let cameraStateString = parametersFromFile["Camera state"];
+  graphicsForConfigurationSpace.easycam.setState(JSON.parse(cameraStateString), 0);
+
+  parameters.mode = "Move";
+  if (verbose) console.log("readFromString: call updateMode");
+  // updateMode();
+
+  easyCamOff();
+}
+
+function readLayoutFromStrings(strings) {
+  if (vverbose) console.log("readLayoutFromStrings");
+  let parametersFromFile = {};
+  for (let s of strings) {
+    if (s === "") continue;
+    let parts = split(s, " = ");
+    if (parts.length !== 2) continue;
+    parametersFromFile[parts[0]] = parts[1];
+  }
+
+  let graphParametersString = parametersFromFile["Graph parameters"];
+  let graphParameters = JSON.parse(graphParametersString);
+  graph.graphLayout.edgelength = graphParameters["edgelength"];
+  graph.graphLayout.cohesionthreshold = graphParameters["cohesionthreshold"];
+  graph.graphLayout.repulsion = graphParameters["repulsion"];
+  graph.graphLayout.separationFactor = graphParameters["separationFactor"];
+  graph.graphLayout.planarForce = graphParameters["planarForce"];
+  graph.graphLayout.centerForce = graphParameters["centerForce"];
+  graph.graphLayout.extraCenterForce = graphParameters["extraCenterForce"];
+  graph.graphLayout.moveToCenter = graphParameters["moveToCenter"];
+
+  let configSpaceParametersString = parametersFromFile["Configuration space parameters"];
+  let configSpaceParameters = JSON.parse(configSpaceParametersString);
+  configuration_space.graphLayout.firstCoordinateEdgeLength = configSpaceParameters["firstCoordinateEdgeLength"];
+  configuration_space.graphLayout.firstCoordinateForce = configSpaceParameters["firstCoordinateForce"];
+  configuration_space.graphLayout.secondCoordinateEdgeLength = configSpaceParameters["secondCoordinateEdgeLength"];
+  configuration_space.graphLayout.secondCoordinateForce = configSpaceParameters["secondCoordinateForce"];
+  configuration_space.graphLayout.firstCoordinateMirrorForce = configSpaceParameters["firstCoordinateMirrorForce"];
+  configuration_space.graphLayout.secondCoordinateMirrorForce = configSpaceParameters["secondCoordinateMirrorForce"];
+  configuration_space.graphLayout.coordinatePreference = configSpaceParameters["coordinatePreference"];
+  configuration_space.graphLayout.extraCenterPreference = configSpaceParameters["extraCenterPreference"];
+  configuration_space.graphLayout.cohesionthreshold = configSpaceParameters["cohesionthreshold"];
+  configuration_space.graphLayout.repulsion = configSpaceParameters["repulsion"];
+  configuration_space.graphLayout.separationFactor = configSpaceParameters["separationFactor"];
+  configuration_space.graphLayout.centerForce = configSpaceParameters["centerForce"];
+  configuration_space.graphLayout.extraCenterForce = configSpaceParameters["extraCenterForce"];
+  configuration_space.graphLayout.moveToCenter = configSpaceParameters["moveToCenter"];
+  configuration_space.graphLayout.squarePlanarForce = configSpaceParameters["squarePlanarForce"];
+
+  // initGUI();
+}
+
+// CREATE STRINGS
+
+function labelToString(L) {
+  let result = "";
+  if (Array.isArray(L)) {
+    for (let l of L) {
+      result += l + " ";
+    }
+    result = result.slice(0, -1);
+    return result;
+  } else {
+    return L;
+  }
+}
+
+function posToString(pos) {
+  return "[" + pos.x + "," + pos.y + "," + pos.z + "]";
+}
+
+function edgesToString(edges) {
+  let result = "";
+  for (let edge of edges) {
+    result += "[" + edge + "],";
+  }
+  result = result.substr(0, result.length - 1);
+  return result;
 }
 
 function updateInfoString() {
@@ -275,270 +528,6 @@ function updateLayoutStrings() {
   layoutStrings.push("Configuration space parameters = " + JSON.stringify(configSpaceParameters));
 }
 
-function readLayoutFromStrings(strings) {
-  if (vverbose) console.log("readLayoutFromStrings");
-  let parametersFromFile = {};
-  for (let s of strings) {
-    if (s === "") continue;
-    let parts = split(s, " = ");
-    if (parts.length !== 2) continue;
-    parametersFromFile[parts[0]] = parts[1];
-  }
-
-  let graphParametersString = parametersFromFile["Graph parameters"];
-  let graphParameters = JSON.parse(graphParametersString);
-  graph.graphLayout.edgelength = graphParameters["edgelength"];
-  graph.graphLayout.cohesionthreshold = graphParameters["cohesionthreshold"];
-  graph.graphLayout.repulsion = graphParameters["repulsion"];
-  graph.graphLayout.separationFactor = graphParameters["separationFactor"];
-  graph.graphLayout.planarForce = graphParameters["planarForce"];
-  graph.graphLayout.centerForce = graphParameters["centerForce"];
-  graph.graphLayout.extraCenterForce = graphParameters["extraCenterForce"];
-  graph.graphLayout.moveToCenter = graphParameters["moveToCenter"];
-
-  let configSpaceParametersString = parametersFromFile["Configuration space parameters"];
-  let configSpaceParameters = JSON.parse(configSpaceParametersString);
-  configuration_space.graphLayout.firstCoordinateEdgeLength = configSpaceParameters["firstCoordinateEdgeLength"];
-  configuration_space.graphLayout.firstCoordinateForce = configSpaceParameters["firstCoordinateForce"];
-  configuration_space.graphLayout.secondCoordinateEdgeLength = configSpaceParameters["secondCoordinateEdgeLength"];
-  configuration_space.graphLayout.secondCoordinateForce = configSpaceParameters["secondCoordinateForce"];
-  configuration_space.graphLayout.firstCoordinateMirrorForce = configSpaceParameters["firstCoordinateMirrorForce"];
-  configuration_space.graphLayout.secondCoordinateMirrorForce = configSpaceParameters["secondCoordinateMirrorForce"];
-  configuration_space.graphLayout.coordinatePreference = configSpaceParameters["coordinatePreference"];
-  configuration_space.graphLayout.extraCenterPreference = configSpaceParameters["extraCenterPreference"];
-  configuration_space.graphLayout.cohesionthreshold = configSpaceParameters["cohesionthreshold"];
-  configuration_space.graphLayout.repulsion = configSpaceParameters["repulsion"];
-  configuration_space.graphLayout.separationFactor = configSpaceParameters["separationFactor"];
-  configuration_space.graphLayout.centerForce = configSpaceParameters["centerForce"];
-  configuration_space.graphLayout.extraCenterForce = configSpaceParameters["extraCenterForce"];
-  configuration_space.graphLayout.moveToCenter = configSpaceParameters["moveToCenter"];
-  configuration_space.graphLayout.squarePlanarForce = configSpaceParameters["squarePlanarForce"];
-
-  // initGUI();
-}
-
-function writeToFiles() {
-  writeParametersToFile();
-  // writeLayoutToFile();
-  // writeChainComplexToFile();
-  // writeObjToFile();
-}
-
-function writeParametersToFile() {
-  let filename = makeFileName("");
-  updateInfoString();
-  saveStrings(infoStrings, filename, "txt");
-  saveCanvas(configuration_space.graphLayout.graphics, filename + ".png");
-}
-
-function writeLayoutToFile() {
-  updateLayoutStrings();
-  saveStrings(layoutStrings, makeFileName("-layout"), "txt");
-}
-
-function writeChainComplexToFile() {
-  let str = getChompString();
-  saveStrings([str], makeFileName(""), "chn");
-}
-
-function writeObjToFile() {
-  let str = getObjString();
-  saveStrings([str], makeFileName(""), "obj");
-}
-
-function readHomology() {
-  const filename = "catalog/" + parameters.graphType + ".gen";
-  loadStrings(filename, saveLoopsInConfigurationSpace);
-}
-
-function saveLoopsInConfigurationSpace(strings) {
-  let loops = getLoops(strings);
-  configuration_space.loops = loops;
-  console.log("loops loaded");
-  console.log(loops);
-}
-
-function getLoops(strings) {
-  let readingLoops = false;
-  let loops = [];
-  for (let s of strings) {
-    if (!readingLoops && s === "[H_1]") {
-      readingLoops = true;
-      continue;
-    }
-    if (readingLoops) {
-      if (s === "") {
-        return loops;
-      } else {
-        let loop = s
-          .split(/[+-]/)
-          .filter((x) => x !== "")
-          .map(trim)
-          .map((x) => JSON.parse(x));
-        loops.push(loop);
-      }
-    }
-  }
-}
-
-function readFromString(strings) {
-  if (verbose) console.log("readFromString");
-  let parametersFromFile = {};
-  for (let s of strings) {
-    if (s === "") continue;
-    let parts = split(s, " = ");
-    if (parts.length !== 2) continue;
-    parametersFromFile[parts[0]] = parts[1];
-  }
-
-  parameters.graphType = parametersFromFile["Graph"];
-
-  if (parameters.graphType === "custom") {
-    customGraph = {};
-    customGraph.nodes = JSON.parse(parametersFromFile["Nodes"]);
-    customGraph.edges = JSON.parse(parametersFromFile["Edges"]);
-  }
-
-  let globalParametersString = parametersFromFile["Parameters"];
-  let globalParameters = JSON.parse(globalParametersString);
-  parameters.mode = globalParameters["mode"];
-  parameters.showGraph = globalParameters["showGraph"];
-  parameters.showConfigurationspace = globalParameters["showConfigurationspace"];
-  parameters.showRobots = globalParameters["showRobots"];
-  parameters.syncView = globalParameters["syncView"];
-  parameters.distinguishDots = globalParameters["distinguishDots"];
-  parameters.gridOn = globalParameters["gridOn"];
-  parameters.squareOn = globalParameters["squareOn"];
-  parameters.showHyperplanes = globalParameters["showHyperplanes"];
-  parameters.granularityFirstCoordinate = globalParameters["granularityFirstCoordinate"];
-  parameters.granularitySecondCoordinate = globalParameters["granularitySecondCoordinate"];
-  parameters.showText = globalParameters["showText"];
-  parameters.sphereView = globalParameters["sphereView"];
-  parameters.lights = globalParameters["lights"];
-  parameters.moveDotsRandomly = globalParameters["moveDotsRandomly"];
-  parameters.robotASpeed = globalParameters["robotASpeed"];
-  parameters.robotBSpeed = globalParameters["robotBSpeed"];
-  parameters.amountMultiplier = globalParameters["amountMultiplier"];
-  parameters.recordHistory = globalParameters["recordHistory"];
-  parameters.showHistory = globalParameters["showHistory"];
-  parameters.sphereDetail = globalParameters["sphereDetail"];
-  parameters.speedUp = globalParameters["speedUp"];
-  parameters.labelX = globalParameters["labelX"];
-  parameters.labelY = globalParameters["labelY"];
-  parameters.labelZ = globalParameters["labelZ"];
-  parameters.colorRobotA = globalParameters["colorRobotA"];
-  parameters.colorRobotB = globalParameters["colorRobotB"];
-  parameters.colorConfig = globalParameters["colorConfig"];
-  parameters.colorNode = globalParameters["colorNode"];
-  parameters.colorGraphEdge = globalParameters["colorGraphEdge"];
-  parameters.squareColor = globalParameters["squareColor"];
-  parameters.squareOpacity = globalParameters["squareOpacity"];
-  parameters.activeDotColor = globalParameters["activeDotColor"];
-  parameters.deleteNodeColor = globalParameters["deleteNodeColor"];
-  parameters.selectedNodeForEdgeColor = globalParameters["selectedNodeForEdgeColor"];
-  parameters.nodeSize = globalParameters["nodeSize"];
-  parameters.robotsNodeSize = globalParameters["robotsNodeSize"];
-  parameters.configNodeSize = globalParameters["configNodeSize"];
-  parameters.edgeWidthGraph = globalParameters["edgeWidthGraph"];
-  parameters.edgeWidthConfigSpace = globalParameters["edgeWidthConfigSpace"];
-  parameters.edgeWidthGrid = globalParameters["edgeWidthGrid"];
-  parameters.maxspeed = globalParameters["maxspeed"];
-
-  if (verbose) console.log("readFromString: call initView and initGraph");
-  initView();
-  initGraph(parameters.graphType);
-
-  let graphNodesWithExtraCenterForce = JSON.parse(parametersFromFile["Graph nodes with extra center force"]);
-  for (let node of graphNodesWithExtraCenterForce) {
-    graph.graphLayout.getNode(node).applyExtraCenterForce = true;
-  }
-
-  let graphParametersString = parametersFromFile["Graph parameters"];
-  let graphParameters = JSON.parse(graphParametersString);
-  graph.graphLayout.edgelength = graphParameters["edgelength"];
-  graph.graphLayout.cohesionthreshold = graphParameters["cohesionthreshold"];
-  graph.graphLayout.repulsion = graphParameters["repulsion"];
-  graph.graphLayout.separationFactor = graphParameters["separationFactor"];
-  graph.graphLayout.planarForce = graphParameters["planarForce"];
-  graph.graphLayout.centerForce = graphParameters["centerForce"];
-  graph.graphLayout.extraCenterForce = graphParameters["extraCenterForce"];
-  graph.graphLayout.moveToCenter = graphParameters["moveToCenter"];
-  // infoStrings.push("Graph parameters = " + JSON.stringify(graphParameters));
-
-  let configSpaceParametersString = parametersFromFile["Configuration space parameters"];
-  let configSpaceParameters = JSON.parse(configSpaceParametersString);
-  configuration_space.graphLayout.firstCoordinateEdgeLength = configSpaceParameters["firstCoordinateEdgeLength"];
-  configuration_space.graphLayout.firstCoordinateForce = configSpaceParameters["firstCoordinateForce"];
-  configuration_space.graphLayout.secondCoordinateEdgeLength = configSpaceParameters["secondCoordinateEdgeLength"];
-  configuration_space.graphLayout.secondCoordinateForce = configSpaceParameters["secondCoordinateForce"];
-  configuration_space.graphLayout.firstCoordinateMirrorForce = configSpaceParameters["firstCoordinateMirrorForce"];
-  configuration_space.graphLayout.secondCoordinateMirrorForce = configSpaceParameters["secondCoordinateMirrorForce"];
-  configuration_space.graphLayout.coordinatePreference = configSpaceParameters["coordinatePreference"];
-  configuration_space.graphLayout.extraCenterPreference = configSpaceParameters["extraCenterPreference"];
-  configuration_space.graphLayout.cohesionthreshold = configSpaceParameters["cohesionthreshold"];
-  configuration_space.graphLayout.repulsion = configSpaceParameters["repulsion"];
-  configuration_space.graphLayout.separationFactor = configSpaceParameters["separationFactor"];
-  configuration_space.graphLayout.centerForce = configSpaceParameters["centerForce"];
-  configuration_space.graphLayout.extraCenterForce = configSpaceParameters["extraCenterForce"];
-  configuration_space.graphLayout.moveToCenter = configSpaceParameters["moveToCenter"];
-  // infoStrings.push("Configuration space parameters = " + JSON.stringify(configSpaceParameters));
-
-  if (verbose) console.log("readFromString: call initGUI");
-  // initGUI();
-
-  for (let n of graph.nodes) {
-    let node = graph.graphLayout.getNode(n);
-    let coordinates = parametersFromFile["Node position (" + n + ")"];
-
-    if (coordinates !== undefined && coordinates.charAt(0) == "[" && coordinates.charAt(coordinates.length - 1) == "]") {
-      coordinates = coordinates.slice(1, -1);
-      coordinates = coordinates.split(",").map(Number);
-    }
-
-    // if (verbose) console.log("node coordinates = " + coordinates);
-    node.position = createVector(coordinates[0], coordinates[1], coordinates[2]);
-  }
-
-  for (let node of configuration_space.graphLayout.nodes) {
-    let coordinates = parametersFromFile["Configuration position (" + node.label[0] + "," + node.label[1] + ")"];
-
-    if (coordinates !== undefined && coordinates.charAt(0) == "[" && coordinates.charAt(coordinates.length - 1) == "]") {
-      coordinates = coordinates.slice(1, -1);
-      coordinates = coordinates.split(",").map(Number);
-    }
-    if (verbose) console.log("configuration coordinates = " + coordinates);
-    node.position = createVector(coordinates[0], coordinates[1], coordinates[2]);
-  }
-
-  let cameraStateString = parametersFromFile["Camera state"];
-  graphicsForConfigurationSpace.easycam.setState(JSON.parse(cameraStateString), 0);
-
-  parameters.mode = "Move";
-  if (verbose) console.log("readFromString: call updateMode");
-  // updateMode();
-
-  easyCamOff();
-}
-
-function readFromFile(fileName) {
-  if (verbose) console.log("readFromFile: " + fileName);
-  loadStrings(fileName, readFromString);
-}
-
-function readLayoutFromFile(fileName) {
-  loadStrings(fileName, readLayoutFromStrings);
-}
-
-function posToString(pos) {
-  return "[" + pos.x + "," + pos.y + "," + pos.z + "]";
-}
-
-function handleFile(file) {
-  let str = file.data;
-  let strings = str.split("\n");
-  readFromString(strings);
-}
-
 function getChompString() {
   let result = "";
   result += "chain complex\n\n";
@@ -619,4 +608,36 @@ function getObjString() {
     }
   }
   return result;
+}
+
+// LOOPS
+
+function saveLoopsInConfigurationSpace(strings) {
+  let loops = getLoops(strings);
+  configuration_space.loops = loops;
+  console.log("loops loaded");
+  console.log(loops);
+}
+
+function getLoops(strings) {
+  let readingLoops = false;
+  let loops = [];
+  for (let s of strings) {
+    if (!readingLoops && s === "[H_1]") {
+      readingLoops = true;
+      continue;
+    }
+    if (readingLoops) {
+      if (s === "") {
+        return loops;
+      } else {
+        let loop = s
+          .split(/[+-]/)
+          .filter((x) => x !== "")
+          .map(trim)
+          .map((x) => JSON.parse(x));
+        loops.push(loop);
+      }
+    }
+  }
 }

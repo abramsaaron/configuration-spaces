@@ -3,19 +3,19 @@
 
 <head>
   <meta charset="utf-8" />
-  <script src="lib.js?t=20210309"></script>
-  <script src="app.js?t=20210309"></script>
+  <script defer src="lib.js?t=20210309"></script>
+  <script defer src="app.js?t=20210309"></script>
   <link rel="stylesheet" href="https://maxst.icons8.com/vue-static/landings/line-awesome/line-awesome/1.3.0/css/line-awesome.min.css">
   <link rel="stylesheet" type="text/css" href="styles.css" />
   <script defer data-domain="rant.codes" src="https://plausible.io/js/plausible.js"></script>
 </head>
 
-<body class="w-screen h-screen bg-white">
-  <div id="navbar" class="fixed top-[10px] left-[10px] z-20 w-[calc(100vw-20px)] shadow-2xl rounded-xl h-[50px] m-0 bg-gray-500 text-black flex flex-row justify-center p-4">
-    <div class="flex items-center justify-center p-2 font-sans text-2xl text-white whitespace-nowrap ">Configuration Space Explorer</div>
+<body class="w-screen h-screen p-0 m-0 xoverflow-hidden">
+  <div id="navbar" class="fixed top-[10px] left-[10px] z-20 w-[calc(100vw-20px)] shadow-2xl bg-opacity-80 h-[50px] m-0 bg-black text-white flex flex-row justify-center pl-2">
+    <div class="flex items-center justify-center p-2 text-2xl text-white font-fun whitespace-nowrap ">Configuration Space Explorer</div>
     <div class="flex-grow"></div>
-    <div class="flex flex-row items-center justify-start h-full menu">
-      <!-- component -->
+    <div class="flex flex-row items-center justify-start h-full p-0 m-0 menu">
+
       <div class="inline-block group">
         <button class="flex items-center px-3 py-2 text-white rounded-sm outline-none hover:bg-gray-400 focus:outline-none min-w-32">
           <span class="flex-1 pr-1 font-semibold">Choose graph</span>
@@ -133,6 +133,7 @@
     <div class="canvas-container" id="configspace"></div>
   </div>
 
+  <!-- 
   <div class="fixed w-[100px]  bg-gray-500 text-white rounded-xl top-[70px] left-[10px] flex flex-col items-center">
     <i id="graphtoggle" class="p-2 m-2 text-6xl text-white bg-black rounded-full las la-biohazard"></i>
     <i id="configspacetoggle" class="p-2 m-2 text-6xl text-white bg-black rounded-full las la-cubes"></i>
@@ -141,13 +142,24 @@
     <i id="movetoggle" class="p-2 m-2 text-6xl text-white bg-black rounded-full las la-hand-pointer"></i>
     <i id="physicstoggle" class="p-2 m-2 text-6xl text-white bg-black rounded-full lab la-apple"></i>
   </div>
+ -->
 
-  <div class="hidden fixed w-[calc(100vw-200px)] h-[60px] bg-gray-800 rounded-full bottom-[30px] left-[100px] flex flex-row justify-center items-center">
+  <div class="fixed max-h-screen h-auto overflow-y-auto top-[60px] left-[10px]" id="gui-left"></div>
+  <div class="fixed max-h-screen overflow-y-auto top-[60px] right-[10px]" id="gui-right"></div>
+
+  <div class="hidden fixed w-[calc(100vw-200px)] h-[60px] bg-gray-800 rounded-full bottom-[30px] left-[100px] xflex flex-row justify-center items-center">
     <input id="historyslider" type="range" min="0" max="12" value="0" class="w-full mx-[30px]" step="1">
   </div>
-  <div class="appearance-none fixed top-[60px] right-[10px]" id="lilgui"></div>
-  <div style="display: none;" class="fixed bg-gray-200 rounded-lg w-[calc(100vw-200px)] max-h-[calc(100vh-200px)] overflow-y-auto top-[100px] left-[100px] p-8" id="info"></div>
+
+  <div style="display: none;" class="fixed bg-gray-200 text-black rounded-lg w-[calc(100vw-200px)] max-h-[calc(100vh-200px)] overflow-y-auto top-[100px] left-[100px] p-8" id="info"></div>
+
   <div id="inputDiv"></div>
+
+
+  <!-- For smaller screens -->
+  <div class="fixed top-0 left-0 flex items-center justify-center w-screen h-screen bg-white md:hidden">
+    <div class="text-4xl text-center text-gray-900 font-fun">Please view this on a screen wider than 768px.</div>
+  </div>
 </body>
 
 </html>
