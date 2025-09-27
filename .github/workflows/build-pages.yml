@@ -26,6 +26,7 @@ jobs:
         run: |
           npm install
           npm run build
+          mv htdocs/index.php htdocs/index.html
 
       - name: deploy pages
         uses: JamesIves/github-pages-deploy-action@v4.5.0
