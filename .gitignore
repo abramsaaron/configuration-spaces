@@ -1,4 +1,10 @@
 
 node_modules/
 
-htdocs/
+
+
+htdocs/grid.php
+
+htdocs/index.php
+
+htdocs/lib.js
