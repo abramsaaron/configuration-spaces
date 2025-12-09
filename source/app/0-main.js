@@ -77,6 +77,9 @@ function preload() {
 
 function initParameters() {
   if (verbose) console.log("initParameters");
+
+  parameters.ordered = true;
+
   parameters.graphType = "K(2,3)";
   parameters.mode = "View";
   parameters.running = true;
@@ -290,7 +293,7 @@ function initGraph(graphType) {
   }
 
   graph.createGraphLayout(graphicsForGraph, true);
-  configuration_space = new Configuration_space(graph, 2);
+  configuration_space = new Configuration_space(graph, 2, parameters.ordered );
 
   if (vverbose) print(configuration_space);
 

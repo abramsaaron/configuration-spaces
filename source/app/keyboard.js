@@ -38,6 +38,9 @@ function keyPressed() {
   else if (key === "t") {
     parameters.showText = !parameters.showText;
     // updateIcons();
+  } else if (key === "u") {
+    parameters.ordered = !parameters.ordered;
+    init();
   } else if (key === "n") addNode();
   else if (key === "i") {
     parameters.showInfo = !parameters.showInfo;
