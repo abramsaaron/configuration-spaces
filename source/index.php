@@ -2,6 +2,27 @@
 <html>
 
 <head>
+
+  <title>Configuration Spaces</title>
+  <meta property="og:title" content="Configuration Spaces" />
+
+  <meta name="author" content="Aaron Abrams">
+  <meta name="description" content="Interact with a 3d visualization of the configuration space of two particles on a graph">
+  <meta name="keywords" content="mathematics,configuration,graph" />
+
+  <meta property="og:site_name" content="Configuration Spaces">
+  <meta property="og:title" content="Configuration Spaces">
+  <meta property="og:description" content="Interact with a 3d visualization of the configuration space of two particles on a graph">
+  <meta property="og:image" content="https://abramsaaron.github.io/configuration-spaces/configuration-spaces.png">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://abramsaaron.github.io/configuration-spaces/">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="twitter:title" content="Configuration Spaces">
+  <meta property="twitter:description" content="Interact with a 3d visualization of the configuration space of two particles on a graph">
+  <meta property="twitter:image" content="https://abramsaaron.github.io/configuration-spaces/configuration-spaces.png">
+
+
   <meta charset="utf-8" />
   <script defer src="lib.js?t=20210309"></script>
   <script defer src="app.js?t=20210309"></script>
