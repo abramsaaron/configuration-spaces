@@ -40,6 +40,10 @@ function initGUI() {
   optionsGUI.add(parameters, "squareOn").name("Show square surfaces");
   optionsGUI.add(parameters, "gridOn").name("Show square grids");
 
+  optionsGUI.add(parameters, "ordered").name("Ordered") .onChange((e) => {
+    init();
+  } );
+
   // ----------------------------------------------------------------------//
   let advancedGUI = new lil.GUI({
     title: "Advanced",
